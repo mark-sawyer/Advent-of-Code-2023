@@ -1,0 +1,73 @@
+---
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r}
+
+setwd("C:/Documents/Misc/Advent of Code/Advent of Code 2023")
+source("Setup.R")
+input <- get_input(6L, practice=FALSE)
+
+```
+
+```{r part 1}
+
+tibble(input=input) %>%
+  mutate(
+    input={
+      str_remove(input, "(Time:)|(Distance:)") %>%
+        str_trim() %>%
+        str_split(" ") %>%
+        map(~ .x[which(.x != "")] %>% as.integer())
+    },
+    type=c("time", "record")
+  ) %>%
+  pivot_wider(names_from=type, values_from=input) %>%
+  unnest(c(time, record)) %>%
+  mutate(race=1:n()) %>%
+  select(race, time, record) %>%
+  runfunc(function(d) {
+    distances <- tibble(hold=1:max(d$time)) %>%
+      crossing(seconds_passed=1:max(d$time)) %>%
+      mutate(distance={
+        x <- hold*seconds_passed - hold^2
+        if_else(x < 0L, 0L, x)
+      })
+    
+    d %>%
+      inner_join(
+        distances,
+        join_by(time == seconds_passed),
+        multiple="all"
+      )
+  }) %>%
+  filter(distance > record) %>%
+  summarise(n=n(), .by=race) %>%
+  summarise(prod(n)) %>%
+  deframe()
+
+```
+
+```{r part 2}
+
+tibble(input=input) %>%
+  mutate(
+    input={
+      str_remove(input, "(Time:)|(Distance:)") %>%
+        str_remove_all(" ") %>%
+        as.numeric()
+    },
+    type=c("time", "record")
+  ) %>%
+  pivot_wider(names_from=type, values_from=input) %>%
+  crossing(hold=1:.$time) %>%
+  mutate(
+    added=time + 1 - 2*hold,
+    distance=cumsum(added)
+  ) %>%
+  filter(distance > record) %>%
+  nrow()
+
+```

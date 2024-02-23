@@ -1,0 +1,144 @@
+---
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r}
+
+setwd("C:/Documents/Misc/Advent of Code/Advent of Code 2023")
+source("Setup.R")
+input <- get_input(7L, practice=FALSE)
+
+```
+
+```{r part 1}
+
+tibble(input=input) %>%
+  mutate(
+    input=str_split(input, " "),
+    hand=map_chr(input, ~ .x[1]),
+    bid=map_int(input, ~ .x[2] %>% as.integer())
+  ) %>%
+  select(-input) %>%
+  mutate(
+    id=1:n(),
+    hand=str_split(hand, ""),
+    order=list(c("one", "two", "three", "four", "five"))
+  ) %>%
+  unnest(c(hand, order)) %>%
+  mutate(hand=factor(hand, levels=c("A", "K", "Q", "J", "T", 9:2))) %>%
+  nest_by(id, bid, col_name="hand") %>%
+  mutate(
+    card_counts=map(hand, ~ count(.x, hand) %>% pull(n)),
+    uniques=map_int(card_counts, length),
+    max_of_card=map_int(card_counts, max),
+    type={
+      case_when(
+        max_of_card == 5L ~ "Five of a kind",
+        max_of_card == 4L ~ "Four of a kind",
+        uniques == 2L ~ "Full house",
+        uniques == 3L & max_of_card == 3L ~ "Three of a kind",
+        uniques == 3L ~ "Two pair",
+        uniques == 4L ~ "One pair",
+        TRUE ~ "High card",
+      ) %>%
+        factor(levels=c(
+          "Five of a kind",
+          "Four of a kind",
+          "Full house",
+          "Three of a kind",
+          "Two pair",
+          "One pair",
+          "High card"
+        ))
+    },
+    hand=map(hand, function(x) {
+      x %>%
+        pivot_wider(names_from=order, values_from=hand)
+    })
+  ) %>%
+  unnest(hand) %>%
+  arrange(type, one, two, three, four, five) %>%
+  mutate(
+    rank=n():1,
+    score=rank * bid
+  ) %>%
+  summarise(sum(score)) %>%
+  deframe()
+
+```
+
+```{r part 2}
+
+tibble(input=input) %>%
+  mutate(
+    input=str_split(input, " "),
+    hand=map_chr(input, ~ .x[1]),
+    bid=map_int(input, ~ .x[2] %>% as.integer())
+  ) %>%
+  select(-input) %>%
+  mutate(
+    id=1:n(),
+    hand=str_split(hand, ""),
+    order=list(c("one", "two", "three", "four", "five"))
+  ) %>%
+  unnest(c(hand, order)) %>%
+  mutate(hand=factor(hand, levels=c("A", "K", "Q", "T", 9:2, "J"))) %>%
+  nest_by(id, bid, col_name="hand") %>%
+  mutate(
+    card_counts=map(hand, ~ count(.x, hand)),
+    joker_becomes=map(card_counts, function(card_counts) {
+      x <- card_counts %>% filter(hand != "J")
+      if (nrow(x) == 0L) "J"
+      else {
+        x %>%
+          filter(n == max(n)) %>%
+          pullfirst(hand)   
+      }
+    })
+  ) %>%
+  unnest(joker_becomes) %>%
+  mutate(
+    new_hand=map2(hand, joker_becomes, function(hand, joker_becomes) {
+      hand %>%
+        mutate(hand=if_else(hand == "J", joker_becomes, hand))
+    }),
+    card_counts=map(new_hand, ~ count(.x, hand)),
+    uniques=map_int(card_counts, nrow),
+    max_of_card=map_int(card_counts, ~ max(.x$n)),
+    type={
+      case_when(
+        max_of_card == 5L ~ "Five of a kind",
+        max_of_card == 4L ~ "Four of a kind",
+        uniques == 2L ~ "Full house",
+        uniques == 3L & max_of_card == 3L ~ "Three of a kind",
+        uniques == 3L ~ "Two pair",
+        uniques == 4L ~ "One pair",
+        TRUE ~ "High card",
+      ) %>%
+        factor(levels=c(
+          "Five of a kind",
+          "Four of a kind",
+          "Full house",
+          "Three of a kind",
+          "Two pair",
+          "One pair",
+          "High card"
+        ))
+    },
+    hand=map(hand, function(x) {
+      x %>%
+        pivot_wider(names_from=order, values_from=hand)
+    })
+  ) %>%
+  unnest(hand) %>%
+  arrange(type, one, two, three, four, five) %>%
+  mutate(
+    rank=n():1,
+    score=rank * bid
+  ) %>%
+  summarise(sum(score)) %>%
+  deframe()
+
+```

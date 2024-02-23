@@ -1,0 +1,189 @@
+---
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r}
+
+setwd("C:/Documents/Misc/Advent of Code/Advent of Code 2023")
+source("Setup.R")
+input <- get_input(24L, practice=FALSE)
+
+```
+
+```{r part 1}
+
+tibble(input=input) %>%
+  mutate(
+    input=str_split(input, "@"),
+    pos={
+      map_chr(input, ~ .x[1]) %>%
+        str_split(", ") %>%
+        map(~ as.numeric(.x) %>% { .[1:2] })
+    },
+    vel={
+      map_chr(input, ~ .x[2]) %>%
+        str_split(", ") %>%
+        map(~ as.numeric(.x) %>% { .[1:2] })
+    },
+    coord=list(c("x", "y")),
+    id=1:n()
+  ) %>%
+  unnest(c(pos, vel, coord)) %>%
+  select(id, coord, pos, vel) %>%
+  pivot_wider(names_from=c(coord), values_from=c(pos, vel)) %>%
+  mutate(
+    pos_x2=pos_x + vel_x,
+    pos_y2=pos_y + vel_y,
+    slope=(pos_y2 - pos_y) / (pos_x2 - pos_x),
+    intercept=pos_y - slope*pos_x
+  ) %>%
+  select(id, pos_x, vel_x, slope, intercept) %>%
+  runfunc(function(d) {
+    d %>%
+      rename(id1="id", x1_0="pos_x", x1_t="vel_x", a1="slope", b1="intercept") %>%
+      crossing({
+        d %>%
+          select(id2="id", x2_0="pos_x", x2_t="vel_x", a2="slope", b2="intercept")
+      })
+  }) %>%
+  filter(
+    id1 < id2,
+    a1 != a2
+  ) %>%
+  mutate(
+    x=(b2 - b1) / (a1 - a2),
+    y=a1*x + b1,
+    min=if_else(length(input) == 5L, 7, 200000000000000),
+    max=if_else(length(input) == 5L, 27, 400000000000000),
+    t1=(x - x1_0) / x1_t,
+    t2=(x - x2_0) / x2_t
+  ) %>%
+  filter(
+    x >= min, x <= max,
+    y >= min, y <= max,
+    t1 > 0, t2 > 0
+  ) %>%
+  nrow()
+
+```
+
+```{r part 2}
+
+tibble(input=input) %>%
+  mutate(
+    input=str_split(input, " @ "),
+    pos={
+      map_chr(input, ~ .x[1]) %>%
+        str_split(", ") %>%
+        map(~ as.numeric(.x) %>% { .[1:3] })
+    },
+    vel={
+      map_chr(input, ~ .x[2]) %>%
+        str_split(", ") %>%
+        map(~ as.numeric(.x) %>% { .[1:3] })
+    },
+    coord=list(c("x", "y", "z")),
+    id=1:n()
+  ) %>%
+  select(id, coord, pos, vel) %>%
+  unnest(c(pos, vel, coord)) %>%
+  pivot_wider(names_from=coord, values_from=c(pos, vel)) %>%
+  runfunc(function(d) {
+    # Functions ----
+    get_c1_c2_data <- function(x, coord1, coord2) {
+      names(x) <- names(x) %>%
+        str_replace(coord1, "c1") %>%
+        str_replace(coord2, "c2")
+      x %>%
+        select(id, pos_c1, pos_c2, vel_c1, vel_c2)
+    }
+    check_crossings_in_plane <- function(x, rv1) {
+      x %>%
+        filter(vel_c1 != rv1) %>%
+        filter(row_number() <= 5L) %>%
+        crossing(rv2=-vel_range_bound:vel_range_bound) %>%
+        mutate(
+          vel_c1=vel_c1 - rv1,
+          vel_c2=vel_c2 - rv2,
+          pos_c1_2=pos_c1 + vel_c1,
+          pos_c2_2=pos_c2 + vel_c2,
+          slope=(pos_c2_2 - pos_c2) / (pos_c1_2 - pos_c1),
+          intercept=pos_c2 - slope*pos_c1
+        ) %>%
+        select(rv2, id1="id", a1="slope", b1="intercept") %>%
+        inner_join({
+          rename(., id2="id1", a2="a1", b2="b1")
+        }, join_by(rv2), multiple="all") %>%
+        filter(
+          id2 < id1,
+          a1 != a2
+        ) %>%
+        mutate(cross_at=round((b2 - b1) / (a1 - a2))) %>%
+        summarise(crossings=n_distinct(cross_at), .by=rv2) %>%
+        filter(crossings == 1L) %>%
+        select(rv2) %>%
+        deframe()
+    }
+    
+    # Get velocities ----
+    vel_range_bound <- 500L
+    temp <- get_c1_c2_data(d, "x", "y")
+    for (rv1 in -vel_range_bound:vel_range_bound) {
+      print(rv1)
+      rv2 <- check_crossings_in_plane(temp, rv1)
+      if (length(rv2) != 0L) {
+        temp <- get_c1_c2_data(d, "x", "z")
+        
+        rv3 <- check_crossings_in_plane(temp, rv1)
+        break
+      }
+    }
+    
+    # Get t1 ----
+    t1 <- d %>%
+      filter(id <= 2L) %>%
+      mutate(
+        vel_x=vel_x - rv1,
+        vel_y=vel_y - rv2,
+        pos_x2=pos_x + vel_x,
+        pos_y2=pos_y + vel_y,
+        slope=(pos_y2 - pos_y) / (pos_x2 - pos_x),
+        intercept=pos_y - slope*pos_x
+      ) %>%
+      runfunc(function(dat) {
+        x <- dat %>%
+          select(id, a="slope", b="intercept") %>%
+          pivot_wider(names_from=id, values_from=c(a, b)) %>%
+          mutate(x=(b_2 - b_1) / (a_1 - a_2)) %>%
+          pull(x)
+        
+        dat %>%
+          filter(id == 1L) %>%
+          mutate(t=(x - pos_x) /  vel_x) %>%
+          pull(t)
+      })
+    
+    # Get position ----
+    position <- d %>%
+      filter(id == 1L) %>%
+      pivot_longer(-id) %>%
+      transmute(
+        id, value,
+        type=str_sub(name, 1L, 3L),
+        coord=str_sub(name, -1L)
+      ) %>%
+      pivot_wider(names_from=type, values_from=value) %>%
+      arrange(coord) %>%
+      mutate(
+        rock_vel=c(rv1, rv2, rv3),
+        rock_pos=t1*vel + pos - t1*rock_vel
+      ) %>%
+      pull(rock_pos)
+    
+    # Answer ----
+    sum(position) %>% as.character()
+  })
+
+```

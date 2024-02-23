@@ -1,0 +1,183 @@
+---
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r}
+
+setwd("C:/Documents/Misc/Advent of Code/Advent of Code 2023")
+source("Setup.R")
+input <- get_input(14L, practice=FALSE)
+
+```
+
+```{r part 1}
+
+tibble(input=input) %>%
+  turn_into_matrix() %>%
+  runfunc(function(m) {
+    get_north_location <- function(coords) {
+      if (coords[1] == 1L) return(NULL)
+      else return(c(coords[1] - 1L, coords[2]))
+    }
+    space_empty <- function(coords, m) {
+      m[coords[1], coords[2]] == "."
+    }
+    move_rock <- function(m, coords) {
+      north_location <- get_north_location(coords)
+      if (is.null(north_location)) return(coords)
+      is_empty <- space_empty(north_location, m)
+      if (is_empty) {
+        m[north_location[1], north_location[2]] <<- "O"
+        m[coords[1], coords[2]] <<- "."
+        moved_rock <<- TRUE
+        return(north_location)
+      }
+      else return(coords)
+    }
+    
+    rock_locations <- {
+      l <- list()
+      for (r in 1:nrow(m)) {
+        for (c in 1:ncol(m)) {
+          element <- m[r,c]
+          if (element == "O") {
+            l[[length(l) + 1L]] <- c(r, c)
+          }
+        }
+      }
+      l
+    }
+    moved_rock <- TRUE
+    while (moved_rock) {
+      moved_rock <- FALSE
+      rock_locations <- map(rock_locations, ~ move_rock(m, .x))
+    }
+    
+    l <- vector(mode="list", length=nrow(m))
+    for (i in 1:nrow(m)) {
+      l[[i]] <- m[i,]
+    }
+    map2_int(l, length(l):1, function(row, points) {
+      sum(row == "O") * points
+    }) %>%
+      sum()
+  })
+  
+```
+
+```{r part 2}
+
+tibble(input=input) %>%
+  turn_into_matrix() %>%
+  runfunc(function(m) {
+    # Functions ----
+    space_empty <- function(coords, m) {
+      m[coords[1], coords[2]] == "."
+    }
+    valid_coord <- function(coords, m) {
+      (coords[1] %nin% c(0L, nrow(m) + 1L)) &&
+        (coords[2] %nin% c(0L, ncol(m) + 1L)) &&
+        (m[coords[1], coords[2]] == ".")
+    }
+    try_to_move_rock <- function(m, r, c, coord_dir) {
+      element <- m[r, c]
+      if (element != "O") return(m)
+      
+      found_place_to_move <- FALSE
+      new_coords <- c(r, c)
+      while (!found_place_to_move) {
+        test_new_coords <- new_coords + coord_dir
+        if (valid_coord(test_new_coords, m)) new_coords <- test_new_coords
+        else found_place_to_move <- TRUE
+      }
+      m[r, c] <- "."
+      m[new_coords[1], new_coords[2]] <- "O"
+      m
+    }
+    move_rocks_north <- function(m) {
+      coord_dir <- c(-1L, 0L)
+      for (r in 1:nrow(m)) {
+        for (c in 1:ncol(m)) {
+          m <- try_to_move_rock(m, r, c, coord_dir)
+        }
+      }
+      m
+    }
+    move_rocks_east <- function(m) {
+      coord_dir <- c(0L, 1L)
+      for (c in ncol(m):1) {
+        for (r in 1:nrow(m)) {
+          m <- try_to_move_rock(m, r, c, coord_dir)
+        }
+      }
+      m
+    }
+    move_rocks_south <- function(m) {
+      coord_dir <- c(1L, 0L)
+      for (r in nrow(m):1) {
+        for (c in 1:ncol(m)) {
+          m <- try_to_move_rock(m, r, c, coord_dir)
+        }
+      }
+      m
+    }
+    move_rocks_west <- function(m) {
+      coord_dir <- c(0L, -1L)
+      for (c in 1:ncol(m)) {
+        for (r in 1:nrow(m)) {
+          m <- try_to_move_rock(m, r, c, coord_dir)
+        }
+      }
+      m
+    }
+    do_a_cycle <- function(m) {
+      m <- move_rocks_north(m)
+      m <- move_rocks_west(m)
+      m <- move_rocks_south(m)
+      m <- move_rocks_east(m)
+      m
+    }
+    
+    # Go until match found ----
+    after_cycle <- list()
+    m <- do_a_cycle(m)
+    after_cycle[[length(after_cycle) + 1L]] <- m
+    
+    found_match <- FALSE
+    cycles <- 1L
+    while (!found_match) {
+      m <- do_a_cycle(m)
+      cycles <- cycles + 1L
+      print(cycles)
+      after_cycle[[length(after_cycle) + 1L]] <- m
+      for (i in 1:(length(after_cycle) - 1L)) {
+        if (mean(after_cycle[[i]] == m) == 1) {
+          found_match <- TRUE
+          break
+        }
+      }
+    }
+    
+    # Get to the 1000000000 arrangement ----
+    cycles_until_repeat <- length(after_cycle) - i
+    mod_after_total <- 1000000000L %% cycles_until_repeat
+    mod_now <- length(after_cycle) %% cycles_until_repeat
+    extra_needed <- (mod_after_total - mod_now) %% cycles_until_repeat
+    for (i in 1:extra_needed) {
+      m <- do_a_cycle(m)
+    }
+    
+    # Get number ----
+    l <- vector(mode="list", length=nrow(m))
+    for (i in 1:nrow(m)) {
+      l[[i]] <- m[i,]
+    }
+    map2_int(l, length(l):1, function(row, points) {
+      sum(row == "O") * points
+    }) %>%
+      sum()
+  })
+
+```

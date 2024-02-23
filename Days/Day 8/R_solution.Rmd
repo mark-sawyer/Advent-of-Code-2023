@@ -1,0 +1,231 @@
+---
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r}
+
+setwd("C:/Documents/Misc/Advent of Code/Advent of Code 2023")
+source("Setup.R")
+input <- get_input(8L, practice=FALSE)
+# input <- get_input(8L, name="practice_other")
+
+```
+
+```{r part 1}
+
+tibble(input=input) %>%
+  runfunc(function(d) {
+    get_move_mat <- function(dir) {
+      matrix(0, nrow=nrow(map), ncol=nrow(map)) %>%
+        runfunc(function(m) {
+          temp <- map %>% mutate(across(c(left, right), ~ as.integer(.x)))
+          for (i in 1:nrow(map)) {
+            m[temp[[dir]][i], i] <- 1L
+          }
+          m
+        })
+    }
+    get_instr_mat <- function(dir) {
+      if (dir == "L") left_mat
+      else right_mat
+    }
+    instructions <- {
+      d$input[1] %>%
+        str_split("") %>%
+        unlist()
+    }
+    map <- {
+      d %>%
+        filter(row_number() >= 3L) %>%
+        transmute(
+          node=str_sub(input, 1L, 3L) %>% factor(),
+          left=str_sub(input, 8L, 10L) %>% factor(levels=levels(node)),
+          right=str_sub(input, 13L, 15L) %>% factor(levels=levels(node))
+        ) %>%
+        arrange(node)
+    }
+    left_mat <- get_move_mat("left")
+    right_mat <- get_move_mat("right")
+    position <- c(1L, rep(0L, nrow(map) - 1L))
+    mat_size <- length(position)
+    moves <- 0L
+    instr_length <- length(instructions)
+    
+    while (position[mat_size] != 1L) {
+      position <- get_instr_mat(instructions[(moves %% instr_length) + 1L]) %*% position
+      moves <- moves + 1L
+    }
+    moves
+  })
+
+```
+
+```{r part 2}
+
+tibble(input=input) %>%
+  runfunc(function(d) {
+    # Functions ----
+    get_instr_mat <- function(dir) {
+      if (dir == "L") left_mat
+      else right_mat
+    }
+    get_move_mat <- function(dir) {
+      matrix(0, nrow=nrow(map), ncol=nrow(map)) %>%
+        runfunc(function(m) {
+          temp <- map %>% mutate(across(c(left, right), ~ as.integer(.x)))
+          for (i in 1:nrow(map)) {
+            m[temp[[dir]][i], i] <- 1L
+          }
+          m
+        })
+    }
+    get_pos_vector <- function(index) {
+      integer(nrow(whole_loop)) %>% {
+        .[index] <- 1L
+        .
+      }
+    }
+    
+    # Objects ----
+    instructions <- {
+      d$input[1] %>%
+        str_split("") %>%
+        unlist()
+    }
+    instr_len <- length(instructions)
+    map <- {
+      d %>%
+        filter(row_number() >= 3L) %>%
+        transmute(
+          node=str_sub(input, 1L, 3L) %>% factor(),
+          left=str_sub(input, 8L, 10L) %>% factor(levels=levels(node)),
+          right=str_sub(input, 13L, 15L) %>% factor(levels=levels(node))
+        ) %>%
+        arrange(node)
+    }
+    left_mat <- get_move_mat("left")
+    right_mat <- get_move_mat("right")
+    whole_loop <- {
+      tibble(instr=instructions) %>%
+        mutate(mat=map(instr, get_instr_mat)) %>%
+        summarise(mat=list(reduce(mat, function(x, y) {
+          y %*% x
+        }))) %>%
+        pullfirst(mat)
+    }
+    A_indices <- {
+      map %>%
+        mutate(index=as.integer(node)) %>%
+        filter(str_sub(node, 3L) == "A") %>%
+        pull(index)
+    }
+    Z_indices <- {
+      map %>%
+        mutate(index=as.integer(node)) %>%
+        filter(str_sub(node, 3L) == "Z") %>%
+        pull(index)
+    }
+    
+    # Make graph ----
+    graph <- tibble(start=integer(), end=integer())
+    i <- 1L
+    start_pos <- get_pos_vector(A_indices[i])
+    continue_making_graph <- TRUE
+    while (continue_making_graph) {
+      end_pos <- whole_loop %*% start_pos
+      start_index <- which(start_pos == 1L)
+      end_index <- which(end_pos == 1L)
+      
+      if ({
+        graph %>%
+          filter(
+            start == start_index,
+            end == end_index
+          ) %>%
+          nrow() %>%
+          { . == 0L }
+      }) {
+        graph <- bind_rows(graph, tibble(start=start_index, end=end_index))
+        start_pos <- end_pos
+      }
+      else {
+        i <- i + 1L
+        continue_making_graph <- i <= length(A_indices)
+        if (continue_making_graph) start_pos <- get_pos_vector(A_indices[i])
+      }
+    }
+    
+    # Z indices within a cycle ----
+    mat_list <- tibble(instr=instructions) %>%
+      mutate(mat=map(instr, get_instr_mat)) %>%
+      pull(mat)
+    
+    Z_index_times <- vector(mode="list", length=nrow(graph))
+    
+    for (graph_row in 1:nrow(graph)) {
+      Ai <- graph$start[graph_row]
+      position <- get_pos_vector(Ai)
+      on_z_at <- integer()
+      for (i in 1:length(mat_list)) {
+        position <- mat_list[[i]] %*% position
+        current_index <- which(position == 1L)
+        if (current_index %in% Z_indices) on_z_at <- c(on_z_at, i)
+      }
+      Z_index_times[[graph_row]] <- on_z_at
+    }
+    
+    graph <- graph %>%
+      mutate(Z_index_times=Z_index_times)
+    
+    # Get answer ----
+    # Relying on assumptions and things I learn that are not true for the practice data...
+    
+    loop_start_ends <- {
+      graph %>%
+        count(end) %>%
+        filter(n != 1L) %>%
+        pull(end)
+    }
+    
+    graph %>%
+      mutate(
+        is_start_end=end %in% loop_start_ends,
+        loop_group={
+          cumsum(is_start_end) %>%
+            { . / 2 } %>%
+            ceiling()
+        }
+      ) %>%
+      select(-is_start_end) %>%
+      nest_by(loop_group) %>%
+      mutate(
+        seq_with_z=map_dbl(data, function(x) {
+          x %>%
+            mutate(
+              rn=0:(n() - 1L),
+              not_empty=map_lgl(Z_index_times, ~ length(.x) != 0L)
+            ) %>%
+            filter(not_empty) %>%
+            pull(rn)
+        }),
+        loop_len=map_dbl(data, nrow) - 1,  # All prime,
+        z_step=map_int(data, function(x) {
+          x %>%
+            pull(Z_index_times) %>%
+            keep(~ length(.x) > 0L) %>%
+            unlist()
+        })
+      ) %>%
+      summarise(
+        instr_len=instr_len,
+        z_step=first(z_step),
+        full_len=prod(loop_len)
+      ) %>%
+      mutate(answer=instr_len * (full_len - 1) + z_step) %>%
+      pull(answer) %>%
+      as.character()
+  })
+  
+```

@@ -1,0 +1,259 @@
+---
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r}
+
+setwd("C:/Documents/Misc/Advent of Code/Advent of Code 2023")
+source("Setup.R")
+input <- get_input(13L, practice=FALSE)
+
+```
+
+```{r part 1}
+
+tibble(input=input) %>%
+  mutate(id=cumsum(input == "") %>% { . + 1L }) %>%
+  filter(input != "") %>%
+  nest_by(id, col_name="matrix") %>%
+  mutate(matrix=map(matrix, function(m) {
+    m %>%
+      mutate(
+        row=1:n(),
+        input=str_split(input, ""),
+        col=map(input, ~ 1:length(.x))
+      ) %>%
+      unnest(c(input, col)) %>%
+      pivot_wider(names_from=col, values_from=input) %>%
+      select(-row) %>%
+      as.matrix() %>%
+      runfunc(function(m) {
+        colnames(m) <- NULL
+        m
+      })
+  })) %>%
+  runfunc(function(d) {
+    mirror_columns <- function(m) {
+      padding_on_left <- function(m) {
+        cols <- ncol(m)
+        mirror_found <- FALSE
+        for (i in 1:(cols - 1L)) {
+          if (mean(m[,i:cols] == m[,cols:i]) == 1) {
+            mirror_found <- TRUE
+            break
+          }
+        }
+        if (mirror_found) {
+          total_reflected_cols <- cols - i + 1L
+          half <- total_reflected_cols / 2L
+          return(i + half - 0.5)
+        }
+        else return(NA_real_)
+      }
+      padding_on_right <- function(m) {
+        cols <- ncol(m)
+        mirror_found <- FALSE
+        for (i in (cols - 1L):2) {
+          if (mean(m[,1:i] == m[,i:1]) == 1) {
+            mirror_found <- TRUE
+            break
+          }
+        }
+        if (mirror_found) {
+          total_reflected_cols <- i
+          half <- total_reflected_cols / 2L
+          return(half + 0.5)
+        }
+        else return(NA_real_)
+      }
+      
+      x <- padding_on_left(m)
+      if (is.na(x)) x <- padding_on_right(m)
+      x
+    }
+    mirror_rows <- function(m) {
+      padding_on_top <- function(m) {
+        rows <- nrow(m)
+        mirror_found <- FALSE
+        for (i in 1:(rows - 1L)) {
+          if (mean(m[i:rows,] == m[rows:i,]) == 1) {
+            mirror_found <- TRUE
+            break
+          }
+        }
+        if (mirror_found) {
+          total_reflected_rows <- rows - i + 1L
+          half <- total_reflected_rows / 2L
+          return(i + half - 0.5)
+        }
+        else return(NA_real_)
+      }
+      padding_on_bottom <- function(m) {
+        rows <- nrow(m)
+        mirror_found <- FALSE
+        for (i in (rows - 1L):2) {
+          if (mean(m[1:i,] == m[i:1,]) == 1) {
+            mirror_found <- TRUE
+            break
+          }
+        }
+        if (mirror_found) {
+          total_reflected_rows <- i
+          half <- total_reflected_rows / 2L
+          return(half + 0.5)
+        }
+        else return(NA_real_)
+      }
+      
+      x <- padding_on_top(m)
+      if (is.na(x)) x <- padding_on_bottom(m)
+      x
+    }
+    find_mirror <- function(m) {
+      x <- mirror_columns(m)
+      if (!is.na(x)) list("columns", x)
+      else {
+        x <- mirror_rows(m)
+        list("rows", x)
+      }
+    }
+    
+    d %>%
+      mutate(
+        mirror=map(matrix, find_mirror),
+        type=map_chr(mirror, ~ .x[[1]]),
+        row_col=map_dbl(mirror, ~ .x[[2]]),
+        num=if_else(type == "columns", floor(row_col), floor(row_col) * 100)
+      ) %>%
+      summarise(sum(num)) %>%
+      deframe()
+  })
+
+```
+
+```{r part 2}
+
+tibble(input=input) %>%
+  mutate(id=cumsum(input == "") %>% { . + 1L }) %>%
+  filter(input != "") %>%
+  nest_by(id, col_name="matrix") %>%
+  mutate(matrix=map(matrix, function(m) {
+    m %>%
+      mutate(
+        row=1:n(),
+        input=str_split(input, ""),
+        col=map(input, ~ 1:length(.x))
+      ) %>%
+      unnest(c(input, col)) %>%
+      pivot_wider(names_from=col, values_from=input) %>%
+      select(-row) %>%
+      as.matrix() %>%
+      runfunc(function(m) {
+        colnames(m) <- NULL
+        m
+      })
+  })) %>%
+  runfunc(function(d) {
+    mirror_columns <- function(m) {
+      padding_on_left <- function(m) {
+        cols <- ncol(m)
+        mirror_found <- FALSE
+        for (i in 1:(cols - 1L)) {
+          if (length(i:cols) %% 2 == 1L) next
+          if (sum(m[,i:cols] != m[,cols:i]) == 2) {
+            mirror_found <- TRUE
+            break
+          }
+        }
+        if (mirror_found) {
+          total_reflected_cols <- cols - i + 1L
+          half <- total_reflected_cols / 2L
+          return(i + half - 0.5)
+        }
+        else return(NA_real_)
+      }
+      padding_on_right <- function(m) {
+        cols <- ncol(m)
+        mirror_found <- FALSE
+        for (i in (cols - 1L):2) {
+          if (length(1:i) %% 2 == 1L) next
+          if (sum(m[,1:i] != m[,i:1]) == 2) {
+            mirror_found <- TRUE
+            break
+          }
+        }
+        if (mirror_found) {
+          total_reflected_cols <- i
+          half <- total_reflected_cols / 2L
+          return(half + 0.5)
+        }
+        else return(NA_real_)
+      }
+      
+      x <- padding_on_left(m)
+      if (is.na(x)) x <- padding_on_right(m)
+      x
+    }
+    mirror_rows <- function(m) {
+      padding_on_top <- function(m) {
+        rows <- nrow(m)
+        mirror_found <- FALSE
+        for (i in 1:(rows - 1L)) {
+          if (length(i:rows) %% 2 == 1L) next
+          if (sum(m[i:rows,] != m[rows:i,]) == 2) {
+            mirror_found <- TRUE
+            break
+          }
+        }
+        if (mirror_found) {
+          total_reflected_rows <- rows - i + 1L
+          half <- total_reflected_rows / 2L
+          return(i + half - 0.5)
+        }
+        else return(NA_real_)
+      }
+      padding_on_bottom <- function(m) {
+        rows <- nrow(m)
+        mirror_found <- FALSE
+        for (i in (rows - 1L):2) {
+          if (length(1:i) %% 2 == 1L) next
+          if (sum(m[1:i,] != m[i:1,]) == 2) {
+            mirror_found <- TRUE
+            break
+          }
+        }
+        if (mirror_found) {
+          total_reflected_rows <- i
+          half <- total_reflected_rows / 2L
+          return(half + 0.5)
+        }
+        else return(NA_real_)
+      }
+      
+      x <- padding_on_top(m)
+      if (is.na(x)) x <- padding_on_bottom(m)
+      x
+    }
+    find_mirror <- function(m) {
+      x <- mirror_columns(m)
+      if (!is.na(x)) list("columns", x)
+      else {
+        x <- mirror_rows(m)
+        list("rows", x)
+      }
+    }
+    
+    d %>%
+      mutate(
+        mirror=map(matrix, find_mirror),
+        type=map_chr(mirror, ~ .x[[1]]),
+        row_col=map_dbl(mirror, ~ .x[[2]]),
+        num=if_else(type == "columns", floor(row_col), floor(row_col) * 100)
+      ) %>%
+      summarise(sum(num)) %>%
+      deframe()
+  })
+
+```

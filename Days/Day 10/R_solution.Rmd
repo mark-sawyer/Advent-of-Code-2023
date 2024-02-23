@@ -1,0 +1,285 @@
+---
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r}
+
+setwd("C:/Documents/Misc/Advent of Code/Advent of Code 2023")
+source("Setup.R")
+input <- get_input(10L, practice=FALSE)
+
+```
+
+```{r part 1}
+
+tibble(input=input) %>%
+  mutate(
+    row=1:n(),
+    col=map(input, ~ 1:length(input)),
+    input=str_split(input, "")
+  ) %>%
+  unnest(c(col, input)) %>%
+  pivot_wider(names_from=col, values_from=input) %>%
+  select(-row) %>%
+  as.matrix() %>%
+  runfunc(function(m) {
+    # Functions ----
+    get_surrounding_coords <- function(mat, r, c) {
+      x <- tibble(row=(r - 1L):(r + 1L)) %>%
+        crossing(col=(c - 1L):(c + 1L)) %>%
+        filter(
+          !(row == max(row) & col %in% c(max(col), min(col))),
+          !(row == min(row) & col %in% c(max(col), min(col))),
+          !(row == r & col == c)
+        ) %>%
+        mutate(
+          dir=c("v", ">", "<", "^"),
+          coords=map2(row, col, ~ c(.x, .y))
+        ) %>%
+        filter(
+          row >= 1, row <= nrow(mat),
+          col >= 1, col <= ncol(mat)
+        )
+      
+      l <- x$coords
+      names(l) <- x$dir
+      l
+    }
+    get_surrounding_elements <- function(mat, r, c) {
+      surrounding_coords <- get_surrounding_coords(mat, r, c)
+      map(surrounding_coords, ~ mat[.x[1], .x[2]] %>% as.character())
+    }
+    get_going_in_pipes <- function(surrounding_elements) {
+      going_in <- character()
+      for (i in 1:length(surrounding_elements)) {
+        name <- names(surrounding_elements)[i]
+        element <- surrounding_elements[[i]]
+        if ({
+          (name == ">" & element %in% c("-", "L", "F")) |
+            (name == "v" & element %in% c("|", "7", "F")) |
+            (name == "<" & element %in% c("-", "7", "J")) |
+            (name == "^" & element %in% c("|", "J", "L"))
+        }) going_in <- c(going_in, name)
+        
+      }
+      going_in
+    }
+    get_starting_pipe <- function(going_in_pipes) {
+      if (">" %in% going_in_pipes & "<" %in% going_in_pipes) "-"
+      else if ("v" %in% going_in_pipes & "^" %in% going_in_pipes) "|"
+      else if ("v" %in% going_in_pipes & "<" %in% going_in_pipes) "L"
+      else if ("v" %in% going_in_pipes & ">" %in% going_in_pipes) "J"
+      else if ("^" %in% going_in_pipes & ">" %in% going_in_pipes) "7"
+      else if ("^" %in% going_in_pipes & "<" %in% going_in_pipes) "F"
+    }
+    get_starting_dir <- function(dir) {
+      if (dir %in% c("-", "L", "F")) ">"
+      else if (dir %in% c("|", "J")) "^"
+      else "v"
+    }
+    update_coords <- function(dir, coords) {
+      if (dir == ">") c(coords[1], coords[2] + 1L)
+      else if (dir == "v") c(coords[1] + 1L, coords[2])
+      else if (dir == "<") c(coords[1], coords[2] - 1L)
+      else if (dir == "^") c(coords[1] - 1L, coords[2])
+    }
+    update_dir <- function(current_dir, new_pipe) {
+      if (current_dir == ">") {
+        if (new_pipe == "-") ">"
+        else if (new_pipe == "7") "v"
+        else if (new_pipe == "J") "^"
+      }
+      else if (current_dir == "v") {
+        if (new_pipe == "|") "v"
+        else if (new_pipe == "L") ">"
+        else if (new_pipe == "J") "<"
+      }
+      else if (current_dir == "<") {
+        if (new_pipe == "-") "<"
+        else if (new_pipe == "F") "v"
+        else if (new_pipe == "L") "^"
+      }
+      else if (current_dir == "^") {
+        if (new_pipe == "|") "^"
+        else if (new_pipe == "7") "<"
+        else if (new_pipe == "F") ">"
+      }
+      
+    }
+    
+    # Setup ----
+    starting_coords <- which(m == "S", arr.ind=TRUE) %>% as.integer()
+    surrounding_elements <- get_surrounding_elements(m, starting_coords[1], starting_coords[2])
+    going_in_pipes <- get_going_in_pipes(surrounding_elements)
+    starting_pipe <- get_starting_pipe(going_in_pipes)
+    updated_m <- m %>% {
+      .[starting_coords[1], starting_coords[2]] <- starting_pipe
+      .
+    }
+    count_mat <- matrix(0L, nrow=nrow(m), ncol=ncol(m))
+    
+    # Algorithm ----
+    current_coords <- starting_coords
+    current_dir <- get_starting_dir(updated_m[starting_coords[1], starting_coords[2]])
+    moves <- 0L
+    while ({
+      (
+        (current_coords[1] != starting_coords[1]) |
+        (current_coords[2] != starting_coords[2])
+      ) |
+        moves == 0L
+    }) {
+      current_coords <- update_coords(current_dir, current_coords)
+      current_pipe <- updated_m[current_coords[1], current_coords[2]] %>% as.character()
+      current_dir <- update_dir(current_dir, current_pipe)
+      moves <- moves + 1L
+      count_mat[current_coords[1], current_coords[2]] <- moves
+    }
+    
+    count_mat[starting_coords[1], starting_coords[2]] / 2L
+  })
+
+```
+
+```{r part 2}
+
+tibble(input=input) %>%
+  turn_into_matrix() %>%
+  runfunc(function(m) {
+    # Functions ----
+    get_surrounding_coords <- function(mat, r, c) {
+      x <- tibble(row=(r - 1L):(r + 1L)) %>%
+        crossing(col=(c - 1L):(c + 1L)) %>%
+        filter(
+          !(row == max(row) & col %in% c(max(col), min(col))),
+          !(row == min(row) & col %in% c(max(col), min(col))),
+          !(row == r & col == c)
+        ) %>%
+        mutate(
+          dir=c("v", ">", "<", "^"),
+          coords=map2(row, col, ~ c(.x, .y))
+        ) %>%
+        filter(
+          row >= 1, row <= nrow(mat),
+          col >= 1, col <= ncol(mat)
+        )
+      
+      l <- x$coords
+      names(l) <- x$dir
+      l
+    }
+    get_surrounding_elements <- function(mat, r, c) {
+      surrounding_coords <- get_surrounding_coords(mat, r, c)
+      map(surrounding_coords, ~ mat[.x[1], .x[2]] %>% as.character())
+    }
+    get_going_in_pipes <- function(surrounding_elements) {
+      going_in <- character()
+      for (i in 1:length(surrounding_elements)) {
+        name <- names(surrounding_elements)[i]
+        element <- surrounding_elements[[i]]
+        if ({
+          (name == ">" & element %in% c("-", "L", "F")) |
+            (name == "v" & element %in% c("|", "7", "F")) |
+            (name == "<" & element %in% c("-", "7", "J")) |
+            (name == "^" & element %in% c("|", "J", "L"))
+        }) going_in <- c(going_in, name)
+        
+      }
+      going_in
+    }
+    get_starting_pipe <- function(going_in_pipes) {
+      if (">" %in% going_in_pipes & "<" %in% going_in_pipes) "-"
+      else if ("v" %in% going_in_pipes & "^" %in% going_in_pipes) "|"
+      else if ("v" %in% going_in_pipes & "<" %in% going_in_pipes) "L"
+      else if ("v" %in% going_in_pipes & ">" %in% going_in_pipes) "J"
+      else if ("^" %in% going_in_pipes & ">" %in% going_in_pipes) "7"
+      else if ("^" %in% going_in_pipes & "<" %in% going_in_pipes) "F"
+    }
+    get_starting_dir <- function(dir) {
+      if (dir %in% c("-", "L", "F")) ">"
+      else if (dir %in% c("|", "J")) "^"
+      else "v"
+    }
+    update_coords <- function(dir, coords) {
+      if (dir == ">") c(coords[1], coords[2] + 1L)
+      else if (dir == "v") c(coords[1] + 1L, coords[2])
+      else if (dir == "<") c(coords[1], coords[2] - 1L)
+      else if (dir == "^") c(coords[1] - 1L, coords[2])
+    }
+    update_dir <- function(current_dir, new_pipe) {
+      if (current_dir == ">") {
+        if (new_pipe == "-") ">"
+        else if (new_pipe == "7") "v"
+        else if (new_pipe == "J") "^"
+      }
+      else if (current_dir == "v") {
+        if (new_pipe == "|") "v"
+        else if (new_pipe == "L") ">"
+        else if (new_pipe == "J") "<"
+      }
+      else if (current_dir == "<") {
+        if (new_pipe == "-") "<"
+        else if (new_pipe == "F") "v"
+        else if (new_pipe == "L") "^"
+      }
+      else if (current_dir == "^") {
+        if (new_pipe == "|") "^"
+        else if (new_pipe == "7") "<"
+        else if (new_pipe == "F") ">"
+      }
+    }
+    
+    # Setup ----
+    current_coords <- which(m == "S", arr.ind=TRUE) %>% as.integer()
+    surrounding_elements <- get_surrounding_elements(m, current_coords[1], current_coords[2])
+    going_in_pipes <- get_going_in_pipes(surrounding_elements)
+    starting_pipe <- get_starting_pipe(going_in_pipes)
+    updated_m <- m %>% {
+      .[current_coords[1], current_coords[2]] <- starting_pipe
+      .
+    }
+    visited_mat <- matrix(FALSE, nrow=nrow(m), ncol=ncol(m))
+    current_dir <- get_starting_dir(updated_m[current_coords[1], current_coords[2]])
+    
+    # Algorithm ----
+    while (!visited_mat[current_coords[1], current_coords[2]]) {
+      visited_mat[current_coords[1], current_coords[2]] <- TRUE
+      current_coords <- update_coords(current_dir, current_coords)
+      current_pipe <- updated_m[current_coords[1], current_coords[2]]
+      current_dir <- update_dir(current_dir, current_pipe)
+    }
+    
+    updated_m <- ifelse(visited_mat, updated_m, ".")
+    updated_m
+  }) %>%
+  runfunc(function(m) {
+    outside <- TRUE
+    count <- 0L
+    for (row in 1:nrow(m)) {
+      last_bend <- NULL
+      for (col in 1:ncol(m)) {
+        element <- m[row, col]
+        if (element == ".") {
+          if (!outside) count <- count + 1L
+        }
+        else if (element == "|") {
+          outside <- !outside
+        }
+        else if (element %in% c("F", "L")) {
+          last_bend <- element
+        }
+        else if (element == "7" && last_bend == "L") {
+          outside <- !outside
+        }
+        else if (element == "J" && last_bend == "F") {
+          outside <- !outside
+        }
+      }
+    }
+    
+    count
+  })
+
+```

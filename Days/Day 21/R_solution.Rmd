@@ -1,0 +1,210 @@
+---
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r}
+
+setwd("C:/Documents/Misc/Advent of Code/Advent of Code 2023")
+source("Setup.R")
+input <- get_input(21L, practice=FALSE)
+
+```
+
+```{r part 1}
+
+tibble(input=input) %>%
+  turn_into_matrix() %>%
+  runfunc(function(m) {
+    coord_allowed <- function(new) {
+      new[1] >= 1L &&
+        new[1] <= nrow(m) &&
+        new[2] >= 1L &&
+        new[2] <= ncol(m) &&
+        m[new[1], new[2]] != "#"
+    }
+    get_step_coords <- function(from) {
+      up <- from + c(-1L, 0L)
+      right <- from + c(0L, 1L)
+      down <- from + c(1L, 0L)
+      left <- from + c(0L, -1L)
+      
+      l <- list()
+      if (coord_allowed(up))    l[[1]] <- up
+      if (coord_allowed(right)) l[[length(l) + 1L]] <- right
+      if (coord_allowed(down))  l[[length(l) + 1L]] <- down
+      if (coord_allowed(left))  l[[length(l) + 1L]] <- left
+      l
+    }
+    take_steps <- function(t) {
+      t %>%
+        mutate(moved_to=map2(row, col, ~ get_step_coords(c(.x, .y)))) %>%
+        unnest(moved_to) %>%
+        transmute(
+          row=map_int(moved_to, ~ .x[1]),
+          col=map_int(moved_to, ~ .x[2])
+        ) %>%
+        distinct()
+    }
+    
+    start_coord <- which(m == "S", arr.ind=TRUE) %>% as.numeric()
+    locations <- tibble(row=start_coord[1], col=start_coord[2])
+    for (i in 1:64) {
+      locations <- take_steps(locations)
+    }
+    nrow(locations)
+  })
+
+```
+
+```{r part 2}
+
+tibble(input=input) %>%
+  turn_into_matrix() %>%  # Turn into matrix
+  runfunc(function(m) {
+    # Functions ----
+    repeat_matrix <- function(x, repeats) {
+      copy <- x
+      for (i in 1:(repeats - 1L)) {
+        x <- cbind(x, copy)
+      }
+      copy <- x
+      for (i in 1:(repeats - 1L)) {
+        x <- rbind(x, copy)
+      }
+      x
+    }
+    get_new_positions <- function(r, c) {
+      new_coords <- list()
+      if (m_copy[r + 1L, c] == ".") new_coords[[1]] <- c(r + 1L, c)
+      if (m_copy[r - 1L, c] == ".") new_coords[[length(new_coords) + 1L]] <- c(r - 1L, c)
+      if (m_copy[r, c + 1L] == ".") new_coords[[length(new_coords) + 1L]] <- c(r, c + 1L)
+      if (m_copy[r, c - 1L] == ".") new_coords[[length(new_coords) + 1L]] <- c(r, c - 1L)
+      new_coords
+    }
+    
+    coord_allowed <- function(new, m) {
+      new[1] >= 1L &&
+        new[1] <= nrow(m) &&
+        new[2] >= 1L &&
+        new[2] <= ncol(m) &&
+        m[new[1], new[2]] != "#"
+    }
+    get_step_coords <- function(from, m) {
+      up <- from + c(-1L, 0L)
+      right <- from + c(0L, 1L)
+      down <- from + c(1L, 0L)
+      left <- from + c(0L, -1L)
+      
+      l <- list()
+      if (coord_allowed(up, m))    l[[1]] <- up
+      if (coord_allowed(right, m)) l[[length(l) + 1L]] <- right
+      if (coord_allowed(down, m))  l[[length(l) + 1L]] <- down
+      if (coord_allowed(left, m))  l[[length(l) + 1L]] <- left
+      l
+    }
+    take_steps <- function(t, m) {
+      t %>%
+        mutate(moved_to=map2(row, col, ~ get_step_coords(c(.x, .y), m_copy))) %>%
+        unnest(moved_to) %>%
+        transmute(
+          row=map_int(moved_to, ~ .x[1]),
+          col=map_int(moved_to, ~ .x[2])
+        ) %>%
+        distinct()
+    }
+    
+    # Setup ----
+    S_coords <- as.integer(which(m == "S", arr.ind=TRUE))
+    m_copy <- m
+    m_copy[S_coords[1], S_coords[2]] <- "."
+    m_copy <- repeat_matrix(m_copy, 5L)
+    start_coords <- {
+      (ncol(m_copy) / 2) %>%
+        ceiling() %>%
+        as.integer() %>%
+        c(., .)
+    }
+    number_of_moves <- as.integer(2*ncol(m) + floor(ncol(m) / 2))
+    
+    # Explore ----
+    locations <- tibble(row=start_coords[1], col=start_coords[2])
+    for (i in 1:number_of_moves) {
+      print(i)
+      locations <- take_steps(locations)
+    }
+    
+    for (i in 1:nrow(locations)) {
+      m_copy[locations$row[i], locations$col[i]] <- "O"
+    }
+    
+    # Divide the map into sections and get spaces_landed ----
+    spaces_landed_in_sections <- tibble(meta_row=1:5) %>%
+      crossing(meta_col=1:5) %>%
+      mutate(
+        size=nrow(m),
+        r_start=(meta_row - 1L)*size + 1L,
+        r_end=r_start + size - 1L,
+        c_start=(meta_col - 1L)*size + 1L,
+        c_end=c_start + size - 1L,
+        sub_mat=pmap(list(r_start, r_end, c_start, c_end), function(r_start, r_end, c_start, c_end) {
+          m_copy[r_start:r_end, c_start:c_end]
+        }),
+        spaces_landed=map_int(sub_mat, ~ sum(.x == "O")),
+        type={
+          case_when(
+            meta_row == 1L & meta_col == 2L ~ "top_left_small",
+            meta_row == 1L & meta_col == 3L ~ "top_point",
+            meta_row == 1L & meta_col == 4L ~ "top_right_small",
+            
+            meta_row == 2L & meta_col == 2L ~ "top_left_big",
+            meta_row == 2L & meta_col == 3L ~ "full_off",
+            meta_row == 2L & meta_col == 4L ~ "top_right_big",
+            
+            meta_row == 3L & meta_col == 1L ~ "left_point",
+            meta_row == 3L & meta_col == 3L ~ "full_cen",
+            meta_row == 3L & meta_col == 5L ~ "right_point",
+            
+            meta_row == 4L & meta_col == 1L ~ "bottom_left_small",
+            meta_row == 4L & meta_col == 2L ~ "bottom_left_big",
+            meta_row == 4L & meta_col == 4L ~ "bottom_right_big",
+            meta_row == 4L & meta_col == 5L ~ "bottom_right_small",
+            
+            meta_row == 5L & meta_col == 3L ~ "bottom_point"
+          )
+        }
+      ) %>%
+      filter(!is.na(type)) %>%
+      select(type, spaces_landed)
+    
+    # Size of actual area ----
+    real_steps <- 26501365L
+    grid_size <- floor(real_steps / ncol(m)) * 2L + 1L
+    
+    small_edges <- floor(grid_size / 2)
+    big_edges <- small_edges - 1
+    num_of_centres_big <- small_edges^2
+    num_of_centres_small <- big_edges^2
+    
+    spaces_landed_in_sections %>%
+      mutate(
+        multiplier={
+          case_when(
+            str_detect(type, "point") ~ 1,
+            str_detect(type, "small") ~ small_edges,
+            str_detect(type, "big") ~ big_edges,
+            type == "full_cen" & small_edges %% 2 == 1 ~ num_of_centres_big,
+            type == "full_cen" & small_edges %% 2 == 0 ~ num_of_centres_small,
+            type == "full_off" & small_edges %% 2 == 1 ~ num_of_centres_small,
+            type == "full_off" & small_edges %% 2 == 0 ~ num_of_centres_big
+          )
+        },
+        product=spaces_landed * multiplier
+      ) %>%
+      summarise(sum(product)) %>%
+      deframe() %>%
+      as.character()
+  })
+
+```

@@ -1,0 +1,142 @@
+---
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r}
+
+setwd("C:/Documents/Misc/Advent of Code/Advent of Code 2023")
+source("Setup.R")
+input <- get_input(11L, practice=FALSE)
+
+```
+
+```{r part 1}
+
+tibble(input=input) %>%
+  mutate(
+    row=1:n(),
+    input=str_split(input, ""),
+    col=map(input, ~ 1:length(.x))
+  ) %>%
+  unnest(c(input, col)) %>%
+  pivot_wider(names_from=col, values_from=input) %>%
+  select(-row) %>%
+  as.matrix() %>%
+  runfunc(function(m) {
+    colnames(m) <- NULL
+    m
+  }) %>%
+  runfunc(function(m) {
+    empty_rows <- integer()
+    for (row in 1:nrow(m)) {
+      if (mean(m[row,] == ".") == 1) empty_rows <- c(empty_rows, row)
+    }
+    empty_rows
+    new_mat <- matrix(" ", nrow=nrow(m) + length(empty_rows), ncol=ncol(m))
+    new_row <- 0L
+    for (row in 1:nrow(m)) {
+      new_row <- new_row + 1L
+      new_mat[new_row,] <- m[row,]
+      if (row %in% empty_rows) {
+        new_row <- new_row + 1L
+        new_mat[new_row,] <- m[row,]
+      }
+    }
+    new_mat
+  }) %>%
+  runfunc(function(m) {
+    empty_cols <- integer()
+    for (col in 1:ncol(m)) {
+      if (mean(m[,col] == ".") == 1) empty_cols <- c(empty_cols, col)
+    }
+    new_mat <- matrix(" ", nrow=nrow(m), ncol=ncol(m) + length(empty_cols))
+    new_col <- 0L
+    for (col in 1:ncol(m)) {
+      new_col <- new_col + 1L
+      new_mat[,new_col] <- m[,col]
+      if (col %in% empty_cols) {
+        new_col <- new_col + 1L
+        new_mat[,new_col] <- m[,col]
+      }
+    }
+    new_mat
+  }) %>%
+  runfunc(function(m) {
+    which(m == "#", arr.ind=TRUE) %>%
+      as_tibble() %>%
+      mutate(id1=1:n()) %>%
+      rename(row1="row", col1="col") %>%
+      crossing({
+        (.) %>%
+          rename(row2="row1", col2="col1", id2="id1")
+      }) %>%
+      filter(id2 < id1) %>%
+      mutate(dist=abs(row2 - row1) + abs(col2 - col1)) %>%
+      summarise(sum(dist)) %>%
+      deframe()
+  })
+
+```
+
+```{r part 2}
+
+tibble(input=input) %>%
+  mutate(
+    row=1:n(),
+    input=str_split(input, ""),
+    col=map(input, ~ 1:length(.x))
+  ) %>%
+  unnest(c(input, col)) %>%
+  pivot_wider(names_from=col, values_from=input) %>%
+  select(-row) %>%
+  as.matrix() %>%
+  runfunc(function(m) {
+    colnames(m) <- NULL
+    m
+  }) %>%
+  runfunc(function(m) {
+    empty_rows <- integer()
+    for (row in 1:nrow(m)) {
+      if (mean(m[row,] == ".") == 1) empty_rows <- c(empty_rows, row)
+    }
+    empty_cols <- integer()
+    for (col in 1:ncol(m)) {
+      if (mean(m[,col] == ".") == 1) empty_cols <- c(empty_cols, col)
+    }
+    
+    which(m == "#", arr.ind=TRUE) %>%
+      as_tibble() %>%
+      rename(row1="row", col1="col") %>%
+      mutate(id1=1:n()) %>%
+      crossing({
+        (.) %>%
+          rename(
+            row2="row1",
+            col2="col1",
+            id2="id1"
+          )
+      }) %>%
+      filter(id2 < id1) %>%
+      mutate(
+        empty_rows=list(empty_rows),
+        rows_travelled=map2(row1, row2, ~ .x:.y),
+        empty_cols=list(empty_cols),
+        cols_travelled=map2(col1, col2, ~ .x:.y),
+        empty_rows_crossed=map2_int(empty_rows, rows_travelled, function(empty_rows, rows_travelled) {
+          sum(rows_travelled %in% empty_rows)
+        }),
+        empty_cols_crossed=map2_int(empty_cols, cols_travelled, function(empty_cols, cols_travelled) {
+          sum(cols_travelled %in% empty_cols)
+        }),
+        total_empties=empty_rows_crossed + empty_cols_crossed,
+        regular_distance=abs(row2 - row1) + abs(col2 - col1),
+        extra=999999L * total_empties,
+        total_distance=regular_distance + extra
+      ) %>%
+      summarise(sum(total_distance)) %>%
+      deframe()
+  })
+
+```

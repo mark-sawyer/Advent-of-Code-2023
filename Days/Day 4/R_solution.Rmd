@@ -1,0 +1,106 @@
+---
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r}
+
+setwd("C:/Documents/Misc/Advent of Code/Advent of Code 2023")
+source("Setup.R")
+input <- get_input(4L, practice=TRUE)
+
+```
+
+```{r part 1}
+
+tibble(input=input) %>%
+  runfunc(function(d) {
+    get_nums <- function(x, index) {
+      x[index] %>%
+        str_split(" ") %>%
+        unlist() %>%
+        { .[. != ""] } %>%
+        as.integer()
+    }
+    
+    d %>%
+      mutate(
+        card_n=row_number(),
+        input=str_remove(input, "Card .*: ") %>% str_split(" \\| "),
+        winners=map(input, ~ get_nums(.x, 1)),
+        my_nums=map(input, ~ get_nums(.x, 2))
+      )
+  }) %>%
+  select(-input) %>%
+  mutate(
+    winners_i_have=map2_int(my_nums, winners, function(my_nums, winners) {
+      winners_i_have <- 0L
+      for (i in 1:length(my_nums)) {
+        if (my_nums[i] %in% winners) winners_i_have <- winners_i_have + 1L
+      }
+      winners_i_have
+    }),
+    points={
+      if_else(
+        winners_i_have > 0L,
+        2 ^ (winners_i_have - 1L),
+        0
+      )
+    }
+  ) %>%
+  summarise(sum(points)) %>%
+  deframe()
+  
+```
+
+```{r part 2}
+
+tibble(input=input) %>%
+  runfunc(function(d) {
+    get_nums <- function(x, index) {
+      x[index] %>%
+        str_split(" ") %>%
+        unlist() %>%
+        { .[. != ""] } %>%
+        as.integer()
+    }
+    
+    d %>%
+      mutate(
+        card_n=row_number(),
+        input=str_remove(input, "Card .*: ") %>% str_split(" \\| "),
+        winners=map(input, ~ get_nums(.x, 1)),
+        my_nums=map(input, ~ get_nums(.x, 2))
+      )
+  }) %>%
+  select(-input) %>%
+  mutate(
+    winners_i_have=map2_int(my_nums, winners, function(my_nums, winners) {
+      winners_i_have <- 0L
+      for (i in 1:length(my_nums)) {
+        if (my_nums[i] %in% winners) winners_i_have <- winners_i_have + 1L
+      }
+      winners_i_have
+    }),
+    copies=1L
+  ) %>%
+  select(card_n, winners_i_have, copies) %>%
+  runfunc(function(d) {
+    for (card in 1:nrow(d)) {
+      winners <- d$winners_i_have[card]
+      if (winners > 0L) {
+        to_update <- {
+          seq(card + 1L, card + winners) %>%
+            { .[. <= nrow(d)] }
+        }
+        d$copies[to_update] <- d$copies[to_update] + d$copies[card]
+      }
+      
+    }
+    d
+  }) %>%
+  summarise(sum(copies)) %>%
+  deframe()
+
+```

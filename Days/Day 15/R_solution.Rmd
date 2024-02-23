@@ -1,0 +1,127 @@
+---
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r}
+
+setwd("C:/Documents/Misc/Advent of Code/Advent of Code 2023")
+source("Setup.R")
+input <- get_input(15L, practice=FALSE)
+
+```
+
+```{r part 1}
+
+tibble(input=input) %>%
+  mutate(input=str_split(input, ",")) %>%
+  unnest(input) %>%
+  runfunc(function(d) {
+    char_to_int <- function(c) {
+      as.integer(charToRaw(c))
+    }
+    add_char_to_hash_val <- function(cv, c) {
+      (cv + char_to_int(c)) %>%
+        { . * 17L } %>%
+        { . %% 256L }
+    }
+    hash_string <- function(s) {
+      len <- str_length(s)
+      cv <- 0L
+      for (i in 1:len) {
+        cv <- add_char_to_hash_val(cv, str_sub(s, i, i))
+      }
+      cv
+    }
+    
+    d %>%
+      mutate(hash=map_int(input, hash_string)) %>%
+      summarise(sum(hash)) %>%
+      deframe()
+  })
+
+```
+
+```{r part 2}
+
+tibble(input=input) %>%
+  mutate(input=str_split(input, ",")) %>%
+  unnest(input) %>%
+  mutate(
+    label_pos=map_int(input, ~ str_locate(.x, "=|-")[1]),
+    label=str_sub(input, 1L, label_pos - 1L),
+    operation=str_sub(input, label_pos, label_pos),
+    focal_length={
+      str_remove(input, label) %>%
+        str_remove(operation) %>%
+        as.integer()
+    }
+  ) %>%
+  select(label, operation, focal_length) %>%
+  runfunc(function(d) {
+    char_to_int <- function(c) {
+      as.integer(charToRaw(c))
+    }
+    add_char_to_hash_val <- function(cv, c) {
+      (cv + char_to_int(c)) %>%
+        { . * 17L } %>%
+        { . %% 256L }
+    }
+    hash_string <- function(s) {
+      len <- str_length(s)
+      cv <- 0L
+      for (i in 1:len) {
+        cv <- add_char_to_hash_val(cv, str_sub(s, i, i))
+      }
+      cv
+    }
+    remove_lens <- function(current_box, label) {
+      index_to_remove <- current_box %>%
+        str_remove(" \\d") %>%
+        { which(. == label) }
+      if (length(index_to_remove) == 0L) return(current_box)
+      else return(current_box[-index_to_remove])
+    }
+    add_lens <- function(current_box, label, focal_length) {
+      index_with_same_label <- current_box %>%
+        str_remove(" \\d") %>%
+        { which(. == label) }
+      if (length(index_with_same_label) == 0L) {
+        return(c(current_box, str_c(label, " ", focal_length)))
+      }
+      else {
+        current_box[index_with_same_label] <- str_c(label, " ", focal_length)
+        return(current_box)
+      }
+    }
+    
+    boxes <- vector(mode="list", length=256L) %>% map(~ character(0L))
+    d <- d %>% mutate(box_for_lab=map_int(label, hash_string) %>% { . + 1L })
+    
+    for (i in 1:nrow(d)) {
+      current_box <- d[i,]$box_for_lab
+      current_op <- d[i,]$operation
+      current_label <- d[i,]$label
+      current_focal_length <- d[i,]$focal_length
+      
+      if (current_op == "=") {
+        boxes[[current_box]] <- add_lens(boxes[[current_box]], current_label, current_focal_length)
+      } else {
+        boxes[[current_box]] <- remove_lens(boxes[[current_box]], current_label)
+      }
+    }
+    
+    boxes
+  }) %>%
+  map2(1:length(.), function(box, index) {
+    vals <- numeric(length(box))
+    for (i in 1:length(box)) {
+      vals[i] <- index * i * str_extract(box[i], "\\d") %>% as.integer()
+    }
+    if (is.na(vals[1])) 0L
+    else sum(vals)
+  }) %>%
+  reduce(sum)
+
+```

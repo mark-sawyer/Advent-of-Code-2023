@@ -1,0 +1,121 @@
+---
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r}
+
+setwd("C:/Documents/Misc/Advent of Code/Advent of Code 2023")
+source("Setup.R")
+input <- get_input(12L, practice=FALSE)
+
+```
+
+```{r part 1}
+
+tibble(input=input) %>%
+  mutate(input=str_split(input, " ")) %>%
+  transmute(
+    record=map_chr(input, ~ .x[1]),
+    sizes={
+      map_chr(input, ~ .x[2]) %>%
+        map(~ str_split(.x, ",") %>% unlist() %>% as.integer())
+    }
+  ) %>%
+  runfunc(function(d) {
+    count <- function(record, sizes) {
+      str_len <- str_length(record)
+      size_len <- length(sizes)
+      if (size_len == 0L) {
+        if (str_detect(record, "#")) return(0L)
+        else return(1L)
+      }
+      if (str_len == 0L) return(0L)
+      
+      arrangements <- 0L
+      if (str_sub(record, 1L, 1L) %in% c("?", ".")) {
+        arrangements <- arrangements + count(str_sub(record, 2L), sizes)
+      }
+      if (str_sub(record, 1L, 1L) %in% c("?", "#")) {
+        if ({
+          str_len >= sizes[1] &&
+            !str_detect(str_sub(record, 1L, sizes[1]), "\\.") &&
+            (str_len == sizes[1] || str_sub(record, sizes[1] + 1L, sizes[1] + 1L) != "#")
+        }) {
+          arrangements <- arrangements + count(str_sub(record, sizes[1] + 2L), sizes[-1])
+        }
+      }
+      arrangements
+    }
+    
+    d %>%
+      transmute(count=map2_int(record, sizes, count)) %>%
+      deframe() %>%
+      sum()
+  })
+
+```
+
+```{r part 2}
+
+tibble(input=input) %>%
+  mutate(input=str_split(input, " ")) %>%
+  transmute(
+    record={
+      map_chr(input, ~ .x[1] %>% rep(5L) %>% str_c(collapse="?"))
+    },
+    sizes={
+      map_chr(input, ~ .x[2]) %>%
+        map(~ str_split(.x, ",") %>% unlist() %>% as.integer() %>% rep(5L))
+    }
+  ) %>%
+  runfunc(function(d) {
+    get_sizes_str <- function(sizes) {
+       str_pad(sizes, 2L, "left", "0") %>%
+        str_c(collapse="")
+    }
+    get_memo <- function(current_record, current_sizes) {
+      memoisation[[str_c(current_record, "_", get_sizes_str(current_sizes))]]
+    }
+    count <- function(record, sizes, id=-999L) {
+      if (id != -999) print(id)
+      
+      str_len <- str_length(record)
+      size_len <- length(sizes)
+      if (size_len == 0L) {
+        if (str_detect(record, "#")) return(0)
+        else return(1)
+      }
+      if (str_len == 0L) return(0)
+      
+      memo <- get_memo(record, sizes)
+      if (!is.null(memo)) return(memo)
+      
+      arrangements <- 0
+      if (str_sub(record, 1L, 1L) %in% c("?", ".")) {
+        arrangements <- arrangements + count(str_sub(record, 2L), sizes)
+      }
+      if (str_sub(record, 1L, 1L) %in% c("?", "#")) {
+        if ({
+          str_len >= sizes[1] &&
+            !str_detect(str_sub(record, 1L, sizes[1]), "\\.") &&
+            (str_len == sizes[1] || str_sub(record, sizes[1] + 1L, sizes[1] + 1L) != "#")
+        }) {
+          arrangements <- arrangements + count(str_sub(record, sizes[1] + 2L), sizes[-1])
+        }
+      }
+      memoisation[[str_c(record, "_", get_sizes_str(sizes))]] <<- arrangements
+      arrangements
+    }
+    
+    memoisation <- hash::hash()
+    
+    d %>%
+      mutate(id=1:n(), count=pmap_dbl(list(record, sizes, id), count)) %>%
+      pull(count) %>%
+      sum() %>%
+      as.character()
+  })
+
+```

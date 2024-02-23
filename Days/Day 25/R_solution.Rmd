@@ -1,0 +1,201 @@
+---
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r}
+
+setwd("C:/Documents/Misc/Advent of Code/Advent of Code 2023")
+source("Setup.R")
+input <- get_input(25L, practice=TRUE)
+
+```
+
+```{r part 1}
+
+tibble(input=input) %>%
+  mutate(
+    input=str_split(input, ": "),
+    id1=map_chr(input, ~ .x[1]),
+    id2=map_chr(input, ~ .x[2]) %>% str_split(" "),
+    w=1L
+  ) %>%
+  select(id1, id2, w) %>%
+  unnest(id2) %>%
+  runfunc(function(d) {
+    d %>%
+      mutate(
+        min=pmin(id1, id2),
+        max=pmax(id1, id2),
+        id1=min,
+        id2=max
+      ) %>%
+      select(-c(min, max))
+  }) %>%  # Put id1 and id2 in alphabetical order
+  runfunc(function(d) {
+    get_puzzle_answer <- function() {
+      node_str_len <- str_length(d$id1[1])
+    
+      graph_for_phase %>%
+        mutate(
+          id1=str_remove_all(id1, "-"),
+          across(c(id1, id2), function(x) {
+            str_remove_all(x, "-") %>%
+              str_length() %>%
+              { . / node_str_len } %>%
+              as.integer()
+          }),
+          answer=id1 * id2
+        ) %>%
+        pull(answer)
+    }
+    join_nodes <- function(g, n1, n2, n_new) {
+      g %>%
+        mutate(
+          id1_match=id1 %in% c(n1, n2),
+          id2_match=id2 %in% c(n1, n2)
+        ) %>%
+        filter(!(id1_match & id2_match)) %>%
+        mutate(
+          new_id1=if_else(id1_match | id2_match, n_new, id1),
+          id2=if_else(id2_match, id1, id2),
+          id1=new_id1
+        ) %>%
+        summarise(w=sum(w), .by=c(id1, id2))
+    }
+    
+    graph <- d
+    start <- min(graph$id1)
+    found_three <- FALSE
+    while (!found_three) {
+      graph_for_phase <- graph
+      current_node <- start
+      while (nrow(graph_for_phase) > 1L) {
+        to_join <- {
+          graph_for_phase %>%
+            filter(id1 == current_node | id2 == current_node) %>%
+            filter(w == max(w)) %>%
+            filter(row_number() == 1L)
+        }
+        current_node <- str_c(to_join$id1, "-", to_join$id2)
+        graph_for_phase <- join_nodes(graph_for_phase, to_join$id1, to_join$id2, current_node)
+      }
+      
+      if (graph_for_phase$w == 3L) {
+        found_three <- TRUE
+        puzzle_answer <- get_puzzle_answer()
+      }
+      else {
+        next_iter <- {
+          graph_for_phase %>%
+            mutate(id1={
+              last_hyphen_index <- str_locate_all(id1, "-") %>%
+                first() %>%
+                { .[nrow(.),1] }
+              str_sub(id1, last_hyphen_index + 1L)
+            }) %>%
+            select(id1, id2)
+        }
+        graph <- join_nodes(graph, next_iter$id1, next_iter$id2, str_c(next_iter$id1, next_iter$id2))
+      }
+    }
+    
+    puzzle_answer
+  })
+
+```
+
+```{r using hash}
+
+tibble(input=input) %>%
+  mutate(
+    input=str_split(input, ": "),
+    id1=map_chr(input, ~ .x[1]),
+    id2=map_chr(input, ~ .x[2]) %>% str_split(" "),
+    w=1L
+  ) %>%
+  select(id1, id2, w) %>%
+  unnest(id2) %>%
+  runfunc(function(d) {
+    d %>%
+      mutate(
+        min=pmin(id1, id2),
+        max=pmax(id1, id2),
+        id1=min,
+        id2=max
+      ) %>%
+      select(-c(min, max))
+  }) %>%  # Put id1 and id2 in alphabetical order
+  runfunc(function(d) {
+    get_puzzle_answer <- function() {
+      node_str_len <- str_length(d$id1[1])
+    
+      graph_for_phase %>%
+        mutate(
+          id1=str_remove_all(id1, "-"),
+          across(c(id1, id2), function(x) {
+            str_remove_all(x, "-") %>%
+              str_length() %>%
+              { . / node_str_len } %>%
+              as.integer()
+          }),
+          answer=id1 * id2
+        ) %>%
+        pull(answer)
+    }
+    join_nodes <- function(g, n1, n2, n_new) {
+      g %>%
+        mutate(
+          id1_match=id1 %in% c(n1, n2),
+          id2_match=id2 %in% c(n1, n2)
+        ) %>%
+        filter(!(id1_match & id2_match)) %>%
+        mutate(
+          new_id1=if_else(id1_match | id2_match, n_new, id1),
+          id2=if_else(id2_match, id1, id2),
+          id1=new_id1
+        ) %>%
+        summarise(w=sum(w), .by=c(id1, id2))
+    }
+    
+    graph <- d
+    start <- min(graph$id1)
+    found_three <- FALSE
+    while (!found_three) {
+      graph_for_phase <- graph
+      current_node <- start
+      while (nrow(graph_for_phase) > 1L) {
+        to_join <- {
+          graph_for_phase %>%
+            filter(id1 == current_node | id2 == current_node) %>%
+            filter(w == max(w)) %>%
+            filter(row_number() == 1L)
+        }
+        current_node <- str_c(to_join$id1, "-", to_join$id2)
+        graph_for_phase <- join_nodes(graph_for_phase, to_join$id1, to_join$id2, current_node)
+      }
+      
+      if (graph_for_phase$w == 3L) {
+        found_three <- TRUE
+        puzzle_answer <- get_puzzle_answer()
+      }
+      else {
+        next_iter <- {
+          graph_for_phase %>%
+            mutate(id1={
+              last_hyphen_index <- str_locate_all(id1, "-") %>%
+                first() %>%
+                { .[nrow(.),1] }
+              str_sub(id1, last_hyphen_index + 1L)
+            }) %>%
+            select(id1, id2)
+        }
+        graph <- join_nodes(graph, next_iter$id1, next_iter$id2, str_c(next_iter$id1, next_iter$id2))
+      }
+    }
+    
+    puzzle_answer
+  })
+
+```

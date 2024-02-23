@@ -1,0 +1,218 @@
+---
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r}
+
+setwd("C:/Documents/Misc/Advent of Code/Advent of Code 2023")
+source("Setup.R")
+input <- get_input(19L, practice=FALSE)
+
+```
+
+```{r part 1}
+
+tibble(input=input) %>%
+  mutate(type={
+    (input == "") %>%
+      cumsum() %>%
+      { if_else(. == 0L, "conditions", "cats") }
+  }) %>%
+  filter(input != "") %>%
+  nest_by(type) %>%
+  pivot_wider(names_from=type, values_from=data) %>%
+  runfunc(function(d) {
+    parts <- {
+      d %>%
+        pullfirst(cats) %>%
+        mutate(
+          id=1:n(),
+          input=str_remove_all(input, "\\{|\\}") %>% str_split(","),
+          cat=map(input, ~ str_sub(.x, 1L, 1L)),
+          values=map(input, ~ str_sub(.x, 3L) %>% as.integer())
+        ) %>%
+        select(id, cat, values) %>%
+        unnest(c(cat, values)) %>%
+        pivot_wider(names_from=cat, values_from=values)
+    }
+    instructions <- {
+      d %>%
+        pullfirst(conditions) %>%
+        mutate(
+          name=map_chr(input, function(x) {
+            squiggle_i <- str_locate(x, "\\{")[1]
+            str_sub(x, 1L, squiggle_i - 1L)
+          }),
+          instructions=map2(input, name, function(input, name) {
+            str_remove(input, name) %>%
+              str_remove_all("\\{|\\}") %>%
+              str_split(",") %>%
+              unlist() %>%
+              tibble(instructions=.) %>%
+              mutate(
+                instructions={
+                  if_else(
+                    row_number() == n(),
+                    str_c("TRUE:", instructions),
+                    instructions
+                  ) %>%
+                    str_split(":")
+                },
+                condition=map(instructions, ~ .x[1] %>% str2lang()),
+                outcome=map_chr(instructions, ~ .x[2])
+              ) %>%
+              select(condition, outcome)
+          })
+        ) %>%
+        select(-input)
+    }
+    
+    list(parts, instructions)
+  }) %>%
+  runfunc(function(d) {
+    get_instructions <- function(name) {
+      d[[2]][which(d[[2]]$name == name),]$instructions[[1]]
+    }
+    direct_part <- function(x, m, a, s, instructions) {
+      x <<- x
+      m <<- m
+      a <<- a
+      s <<- s
+      
+      instructions %>%
+        mutate(
+          condition=map_lgl(condition, eval),
+          cumsum=cumsum(condition)
+        ) %>%
+        filter(cumsum == 1L) %>%
+        filter(row_number() == 1L) %>%
+        pull(outcome)
+    } 
+    accept_or_reject <- function(x, m, a, s) {
+      instr_name <- "in"
+      while (instr_name %nin% c("A", "R")) {
+        instr_name <- direct_part(x, m, a, s, get_instructions(instr_name))
+      }
+      instr_name
+    }
+    
+    
+    d[[1]] %>%
+      mutate(outcome=pmap_chr(list(x, m, a, s), accept_or_reject)) %>%
+      filter(outcome == "A") %>%
+      mutate(total=x + m + a + s) %>%
+      summarise(sum(total)) %>%
+      deframe()
+  })
+
+```
+
+```{r part 2}
+
+tibble(input=input) %>%
+  mutate(type={
+    (input == "") %>%
+      cumsum() %>%
+      { if_else(. == 0L, "conditions", "cats") }
+  }) %>%
+  filter(type == "conditions") %>%
+  select(input) %>%
+  mutate(
+    name=map_chr(input, function(x) {
+      squiggle_i <- str_locate(x, "\\{")[1]
+      str_sub(x, 1L, squiggle_i - 1L)
+    }),
+    instructions=map2(input, name, function(input, name) {
+      str_remove(input, name) %>%
+        str_remove_all("\\{|\\}") %>%
+        str_split(",") %>%
+        unlist() %>%
+        tibble(instructions=.) %>%
+        mutate(
+          instructions={
+            if_else(
+              row_number() == n(),
+              str_c("x>0:", instructions),
+              instructions
+            ) %>%
+              str_split(":")
+          },
+          condition=map_chr(instructions, ~ .x[1]),
+          part=str_sub(condition, 1L, 1L),
+          operator=str_sub(condition, 2L, 2L),
+          num=str_sub(condition, 3L) %>% as.integer(),
+          outcome=map_chr(instructions, ~ .x[2])
+        ) %>%
+        select(part, operator, num, outcome)
+    })
+  ) %>%
+  select(name, instructions) %>%
+  runfunc(function(d) {
+    range_possible <- function(x) {
+      x[1] <= x[2]
+    }
+    get_instructions <- function(name) {
+      d[which(d$name == name),]$instructions[[1]]
+    }
+    evaluate_instr_line <- function(instr_name, instr_line, ranges, i) {
+      part <- instr_line$part
+      operator <- instr_line$operator
+      num <- instr_line$num
+      outcome <- instr_line$outcome
+      
+      true_ranges <- ranges
+      false_ranges <- ranges
+      
+      if (operator == ">") {
+        true_ranges[[part]][1] <- max(true_ranges[[part]][1], num + 1L)
+        false_ranges[[part]][2] <- min(true_ranges[[part]][2], num)
+      }
+      else {
+        true_ranges[[part]][2] <- min(true_ranges[[part]][2], num - 1L)
+        false_ranges[[part]][1] <- max(true_ranges[[part]][1], num)
+      }
+      
+      if (range_possible(true_ranges[[part]])) {
+        if (outcome == "A") {
+          total <<- total + as.numeric((true_ranges$x[2] - true_ranges$x[1] + 1L)) *
+            as.numeric((true_ranges$m[2] - true_ranges$m[1] + 1L)) *
+            as.numeric((true_ranges$a[2] - true_ranges$a[1] + 1L)) *
+            as.numeric((true_ranges$s[2] - true_ranges$s[1] + 1L))
+        }
+        else if (outcome != "R") {
+          evaluate_instr_line(
+            outcome,
+            get_instructions(outcome)[1,],
+            true_ranges,
+            1L
+          )
+        }
+      }
+      if (range_possible(false_ranges[[part]])) {
+        evaluate_instr_line(
+          instr_name,
+          get_instructions(instr_name)[i + 1L,],
+          false_ranges,
+          i + 1L
+        )
+      }
+    }
+    
+    ranges <- {
+      list(
+        x=c(1L, 4000L),
+        m=c(1L, 4000L),
+        a=c(1L, 4000L),
+        s=c(1L, 4000L)
+      )
+    }
+    total <- 0
+    
+    evaluate_instr_line("in", get_instructions("in")[1,], ranges, 1L)
+    
+    format(total, scientific=FALSE)
+  })
+
+```

@@ -1,0 +1,64 @@
+---
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r}
+
+setwd("C:/Documents/Misc/Advent of Code/Advent of Code 2023")
+source("Setup.R")
+input <- get_input(1L, practice=FALSE)
+
+```
+
+```{r part 1}
+
+tibble(input=input) %>%
+  transmute(
+    rn=1:n(),
+    separated=map(input, ~ str_split(.x, "") %>% unlist())
+  ) %>%
+  unnest(separated) %>%
+  filter(separated %in% as.character(0:9)) %>%
+  mutate(separated=as.integer(separated)) %>%
+  summarise(
+    first=first(separated),
+    last=last(separated),
+    .by=rn
+  ) %>%
+  mutate(joined=str_c(first, last) %>% as.integer()) %>%
+  summarise(answer=sum(joined))
+
+```
+
+```{r part 2}
+
+tibble(input=input) %>%
+  mutate(input={
+    str_replace_all(input, "one", "o1e") %>%
+      str_replace_all("two", "t2o") %>%
+      str_replace_all("three", "t3e") %>%
+      str_replace_all("four", "f4r") %>%
+      str_replace_all("five", "f5e") %>%
+      str_replace_all("six", "s6x") %>%
+      str_replace_all("seven", "s7n") %>%
+      str_replace_all("eight", "e8t") %>%
+      str_replace_all("nine", "n9e")
+  }) %>%
+  transmute(
+    rn=1:n(),
+    separated=map(input, ~ str_split(.x, "") %>% unlist())
+  ) %>%
+  unnest(separated) %>%
+  filter(separated %in% as.character(0:9)) %>%
+  mutate(separated=as.integer(separated)) %>%
+  summarise(
+    first=first(separated),
+    last=last(separated),
+    .by=rn
+  ) %>%
+  mutate(joined=str_c(first, last) %>% as.integer()) %>%
+  summarise(answer=sum(joined))
+
+```

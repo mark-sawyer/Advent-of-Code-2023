@@ -1,0 +1,85 @@
+---
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r}
+
+setwd("C:/Documents/Misc/Advent of Code/Advent of Code 2023")
+source("Setup.R")
+input <- get_input(2L, practice=FALSE)
+
+```
+
+```{r part 1}
+
+red_max <- 12L
+green_max <- 13L
+blue_max <- 14L
+
+tibble(input=input) %>%
+  mutate(
+    game=1:n(),
+    input=str_remove(input, "Game .*: "),
+    draws=map(input, ~ str_split(.x, "; ") %>% unlist())
+  ) %>%
+  select(-input) %>%
+  unnest(draws) %>%
+  mutate(
+    col_num=map(draws, ~ str_split(.x, ", ") %>% unlist()),
+    draw_num=1:n(),
+    .by=game
+  ) %>%
+  select(-draws) %>%
+  unnest(col_num) %>%
+  mutate(
+    space_loc=map_int(col_num, ~ str_locate(.x, " ")[1]),
+    num=str_sub(col_num, 1L, space_loc - 1L) %>% as.integer(),
+    colour=str_sub(col_num, space_loc + 1L)
+  ) %>%
+  select(game, draw_num, num, colour) %>%
+  pivot_wider(names_from=colour, values_from=num, values_fill=0L) %>%
+  mutate(
+    red_impossible=red > red_max,
+    green_impossible=green > green_max,
+    blue_impossible=blue > blue_max,
+    impossible=red_impossible | green_impossible | blue_impossible
+  ) %>%
+  summarise(game_impossible=TRUE %in% impossible, .by=game) %>%
+  filter(!game_impossible) %>%
+  summarise(sum(game)) %>%
+  deframe()
+
+```
+
+```{r part 2}
+
+tibble(input=input) %>%
+  mutate(
+    game=1:n(),
+    input=str_remove(input, "Game .*: "),
+    draws=map(input, ~ str_split(.x, "; ") %>% unlist())
+  ) %>%
+  select(-input) %>%
+  unnest(draws) %>%
+  mutate(
+    col_num=map(draws, ~ str_split(.x, ", ") %>% unlist()),
+    .by=game
+  ) %>%
+  select(-draws) %>%
+  unnest(col_num) %>%
+  mutate(
+    space_loc=map_int(col_num, ~ str_locate(.x, " ")[1]),
+    num=str_sub(col_num, 1L, space_loc - 1L) %>% as.integer(),
+    colour=str_sub(col_num, space_loc + 1L)
+  ) %>%
+  summarise(
+    max=max(num),
+    .by=c(game, colour)
+  ) %>%
+  summarise(power=prod(max), .by=game) %>%
+  summarise(sum(power)) %>%
+  deframe()
+
+```

@@ -1,0 +1,295 @@
+---
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r}
+
+setwd("C:/Documents/Misc/Advent of Code/Advent of Code 2023")
+source("Setup.R")
+input <- get_input(23L, practice=FALSE)
+
+```
+
+```{r part 1}
+
+tibble(input=input) %>%
+  turn_into_matrix() %>%
+  runfunc(function(m) {
+    # Functions ----
+    get_possible_dirs <- function(current_dir) {
+      tibble(dir=list(
+        current_dir,
+        as.numeric(right_mat %*% current_dir),
+        as.numeric(left_mat %*% current_dir)
+      ))
+    }
+    slope_to_banned_dir <- function(slope) {
+      if (slope == "^") c(1L, 0L)
+      else if (slope == ">") c(0L, -1L)
+      else if (slope == "v") c(-1L, 0L)
+      else if (slope == "<") c(0L, 1L)
+    }
+    position_allowed <- function(dir, loc) {
+      element <- m[loc[1], loc[2]]
+      if (element == "#") return(FALSE)
+      if (element == ".") return(TRUE)
+      banned_dir <- slope_to_banned_dir(element)
+      return(dir[1] != banned_dir[1] || dir[2] != banned_dir[2])
+    }
+    
+    # Objects ----
+    start <- c(1L, which(m[1,] == "."))
+    end <- c(nrow(m), which(m[nrow(m),] == "."))
+    left_mat <- matrix(c(0, 1, -1, 0), nrow=2L)
+    right_mat <- matrix(c(0, -1, 1, 0), nrow=2L)
+    current_positions <- tibble(
+      location=list(start),
+      dir=list(c(1, 0)),
+      steps=0L,
+      moved=TRUE
+    )
+    
+    # Run ----
+    all_stopped <- FALSE
+    while (!all_stopped) {
+      current_positions <- current_positions %>%
+        mutate(new_positions=pmap(list(location, dir, steps), function(location, dir, steps) {
+          if (location[1] == end[1] && location[2] == end[2]) {
+            return(tibble(
+              location=list(location),
+              dir=list(dir),
+              steps=steps,
+              moved=FALSE
+            ))
+          }
+          
+          get_possible_dirs(dir) %>%
+            mutate(
+              location=map(dir, ~ .x + location),
+              allowed=map2_lgl(dir, location, position_allowed),
+              steps=steps + 1L,
+              moved=TRUE
+            ) %>%
+            filter(allowed) %>%
+            select(location, dir, steps, moved)
+        })) %>%
+        pull(new_positions) %>%
+        reduce(bind_rows)
+      
+      all_stopped <- current_positions %>%
+        summarise(mean(!moved) == 1) %>%
+        deframe()
+    }
+    
+    current_positions %>%
+      summarise(max(steps)) %>%
+      deframe()
+  })
+
+```
+
+```{r part 2}
+
+tibble(input=input) %>%
+  mutate(input=str_replace_all(input, ">|v|<|\\^", ".")) %>%
+  runfunc(function(d) {
+    d %>%
+      bind_rows(
+        d %>%
+          filter(row_number() == 1L) %>%
+          mutate(input=str_replace_all(input, ".", "#"))
+      )
+  }) %>%  # Add extra row at bottom to avoid bugs when we get to the end.
+  turn_into_matrix() %>%
+  runfunc(function(m) {
+    # Functions ----
+    get_possible_dirs <- function(dir) {
+      list(
+        dir,
+        as.numeric(right_mat %*% dir),
+        as.numeric(left_mat %*% dir)
+      )
+    }
+    reverse_dir <- function(dir) {
+      rev_mat %*% dir
+    }
+    dir_to_char <- function(dir) {
+      if (dir[1] == 1) "v"
+      else if (dir[1] == -1) "^"
+      else if (dir[2] == 1) ">"
+      else "<"
+    }
+    get_trail_info <- function(current_walk) {
+      trail_start <- current_walk$trail[[1]][[1]]
+      start_dir <- current_walk$trail[[1]][[2]]
+      trail_end <- current_walk$location[[1]]
+      end_dir <- reverse_dir(current_walk$dir[[1]])
+      
+      tibble(
+        from_r=trail_start[1],
+        from_c=trail_start[2],
+        from_dir=dir_to_char(start_dir),
+        to_r=trail_end[1],
+        to_c=trail_end[2],
+        to_dir=dir_to_char(end_dir),
+        steps=current_walk$steps
+      )
+    }
+    add_new_walks <- function(exploration, current_walk) {
+      for (i in seq_along(exploration$location)) {
+        start_location <- current_walk$location[[1]]
+        new_location <- exploration$possible_location[[i]]
+        unexplored <- !explored[new_location[1], new_location[2]]
+        if (unexplored) {
+          walks <<- walks %>% bind_rows(tibble(
+            location=list(exploration$possible_location[[i]]),
+            dir=list(exploration$possible_dir[[i]]),
+            steps=1L,
+            trail=map(dir, ~ list(start_location, .x))
+          ))
+        }
+      }
+    }
+    
+    # Objects ----
+    left_mat <- matrix(c(0, 1, -1, 0), nrow=2L)
+    right_mat <- matrix(c(0, -1, 1, 0), nrow=2L)
+    rev_mat <- matrix(c(-1, 0, 0, -1), nrow=2L)
+    start <- c(1, which(m[1,] == "."))
+    end <- c(nrow(m) - 1L, which(m[nrow(m) - 1L,] == ".")) %>% as.numeric()
+    trails=tibble()
+    explored <- matrix(FALSE, nrow=nrow(m), ncol=ncol(m))
+    current_walk <- {
+      tibble(
+        location=list(start),
+        dir=list(c(1, 0)),
+        steps=0L,
+        trail=map2(location, dir, ~ list(.x, .y))
+      )
+    }
+    walks <- current_walk
+    
+    # Algorithm ----
+    while (nrow(walks) > 0L) {
+      location <- current_walk$location[[1]]
+      explored[location[1], location[2]] <- TRUE
+      exploration <- {
+        current_walk %>%
+          mutate(possible_dir=map(dir, get_possible_dirs)) %>%
+          unnest(possible_dir) %>%
+          mutate(
+            possible_location=map2(location, possible_dir, ~ .x + .y),
+            element=map_chr(possible_location, ~ m[.x[1], .x[2]])
+          ) %>%
+          filter(element == ".")
+      }
+      if (nrow(exploration) == 1L) {
+        current_walk <- {
+          exploration %>%
+            transmute(
+              location=possible_location,
+              dir=possible_dir,
+              steps=steps + 1L,
+              trail=trail
+            )
+        }
+        location <- current_walk$location[[1]]
+      }
+      else {
+        trails <- bind_rows(trails, get_trail_info(current_walk))
+        add_new_walks(exploration, current_walk)
+        walks <- {
+          walks %>%
+            mutate(
+              unexplored=map_lgl(location, ~ !explored[.x[1], .x[2]]),
+              cumsum=cumsum(unexplored)
+            ) %>%
+            filter(cumsum >= 1L) %>%
+            select(-c(unexplored, cumsum))
+        }  # Remove top explored walks
+        if (nrow(walks) > 0L) current_walk <- walks[1,]
+      }
+    }
+    
+    # Send ----
+    trails %>%
+      arrange(from_r, from_c) %>%
+      bind_rows({
+        (.) %>%
+          mutate(
+            from_r=to_r,
+            from_c=to_c,
+            from_dir=to_dir,
+            to_r=(.)$from_r,
+            to_c=(.)$from_c,
+            to_dir=(.)$from_dir
+          )
+      }) %>%
+      arrange(from_r, from_c, to_r, to_c) %>%
+      runfunc(function(d) {
+        node_ids <- trails %>%
+          select(from_r, from_c, to_r, to_c) %>%
+          runfunc(function(x) {
+            x %>%
+              select(r="from_r", c="from_c") %>%
+              bind_rows({
+                x %>%
+                  select(r="to_r", c="to_c")
+              })
+          }) %>%
+          distinct() %>%
+          mutate(id=1:n())
+        
+        d %>%
+          inner_join({
+            node_ids %>%
+              rename(from="id")
+          }, join_by(from_r == r, from_c == c)) %>%
+          inner_join({
+            node_ids %>%
+              rename(to="id")
+          }, join_by(to_r == r, to_c == c))
+      }) %>%
+      select(from, to, steps) %>%
+      arrange(from, to) %>%
+      filter(from != max(from)) %>%
+      mutate(across(c(from, to), ~ str_pad(.x, 2L, "left", "0")))
+  }) %>%  # Get graph
+  runfunc(function(d) {
+    completed <- tibble()
+    paths <- {
+      d[1,1] %>%
+        mutate(
+          nodes=from,
+          steps=0L
+        )
+    }
+    while (nrow(paths) > 0L) {
+      paths <- paths %>%
+        left_join({
+          d %>%
+            rename(new_steps="steps")
+        }, join_by(from), multiple="all") %>%
+        runfunc(function(x) {
+          completed <<- completed %>%
+            bind_rows(x %>% filter(is.na(to)))
+          
+          x %>% filter(!is.na(to))
+        }) %>%
+        filter(!str_detect(nodes, to)) %>%
+        mutate(
+          from=to,
+          nodes=str_c(nodes, "-", to),
+          steps=steps + new_steps
+        ) %>%
+        select(from, nodes, steps)
+    }
+    
+    completed %>%
+      summarise(max(steps)) %>%
+      deframe()
+  })
+
+```

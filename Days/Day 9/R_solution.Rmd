@@ -1,0 +1,87 @@
+---
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r}
+
+setwd("C:/Documents/Misc/Advent of Code/Advent of Code 2023")
+source("Setup.R")
+input <- get_input(9L, practice=FALSE)
+
+```
+
+```{r part 1}
+
+tibble(input=input) %>%
+  transmute(
+    id=1:n(),
+    number=str_split(input, " ") %>% map(as.integer)
+  ) %>%
+  mutate(
+    num_list=map(number, function(n) {
+      num_list <- list(n)
+      num_list_len <- 1L
+      all_zeros <- FALSE
+      while (!all_zeros) {
+        len <- length(n)
+        n <- n[2:len] - n[1:(len - 1L)]
+        num_list[[num_list_len + 1]] <- n
+        num_list_len <- num_list_len + 1L
+        all_zeros <- sum(n == 0L) == length(n)
+      }
+      num_list
+    }),
+    next_num=map_int(num_list, function(nl) {
+      index <- length(nl) - 1L
+      val <- nl[[index]] %>% last()
+      index <- index - 1L
+      while (index > 0L) {
+        val <- val + last(nl[[index]])
+        index <- index - 1L
+      }
+      val
+    })
+  ) %>%
+  summarise(sum(next_num)) %>%
+  deframe()
+
+```
+
+```{r part 2}
+
+tibble(input=input) %>%
+  transmute(
+    id=1:n(),
+    number=str_split(input, " ") %>% map(as.integer)
+  ) %>%
+  mutate(
+    num_list=map(number, function(n) {
+      num_list <- list(n)
+      num_list_len <- 1L
+      all_zeros <- FALSE
+      while (!all_zeros) {
+        len <- length(n)
+        n <- n[2:len] - n[1:(len - 1L)]
+        num_list[[num_list_len + 1]] <- n
+        num_list_len <- num_list_len + 1L
+        all_zeros <- sum(n == 0L) == length(n)
+      }
+      num_list
+    }),
+    first_num=map_int(num_list, function(nl) {
+      index <- length(nl) - 1L
+      val <- nl[[index]][1]
+      index <- index - 1L
+      while (index > 0L) {
+        val <- nl[[index]][1] - val
+        index <- index - 1L
+      }
+      val
+    })
+  ) %>%
+  summarise(sum(first_num)) %>%
+  deframe()
+
+```

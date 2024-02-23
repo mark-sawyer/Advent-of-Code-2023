@@ -1,0 +1,160 @@
+---
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r}
+
+setwd("C:/Documents/Misc/Advent of Code/Advent of Code 2023")
+source("Setup.R")
+input <- get_input(3L, practice=FALSE)
+
+```
+
+```{r part 1}
+
+tibble(input=input) %>%
+  mutate(
+    input=str_split(input, ""),
+    rn=1:n(),
+    cn=map(input, ~ 1:length(.x))
+  ) %>%
+  unnest(c(input, cn)) %>%
+  pivot_wider(names_from=cn, values_from=input) %>%
+  select(-rn) %>%
+  as.matrix() %>%
+  runfunc(function(m) {
+    check_if_counted <- function(row, col) {
+      found_symbol <- FALSE
+      for (r in (row - 1L):(row + 1L)) {
+        if (r %in% c(0L, rows + 1L)) next
+        for (c in (col - 1L):(col + 1L)) {
+          if (c %in% c(0L, cols + 1L)) next
+          element <- m[r, c]
+          if (element %nin% c(".", as.character(0:9))) found_symbol <- TRUE
+        }
+      }
+      found_symbol
+    }
+    
+    rows <- nrow(m)
+    cols <- ncol(m)
+    numbers <- integer()
+    is_counted <- logical()
+    current_digit <- ""
+    found_a_symbol <- FALSE
+    
+    for (r in 1:rows) {
+      for (c in 1:cols) {
+        element <- m[r, c]
+        if (element %in% as.character(0:9)) {
+          current_digit <- str_c(current_digit, element)
+          if (!found_a_symbol) found_a_symbol <- check_if_counted(r, c)
+        }
+        else if (current_digit != "") {
+          numbers <- c(numbers, as.integer(current_digit))
+          is_counted <- c(is_counted, found_a_symbol)
+          current_digit <- ""
+          found_a_symbol <- FALSE
+        }
+      }
+    }
+    
+    tibble(numbers, is_counted)
+  }) %>%
+  filter(is_counted) %>%
+  summarise(sum(numbers)) %>%
+  deframe()
+
+```
+
+```{r part 2}
+
+tibble(input=input) %>%
+  mutate(
+    input=str_split(input, ""),
+    rn=1:n(),
+    cn=map(input, ~ 1:length(.x))
+  ) %>%
+  unnest(c(input, cn)) %>%
+  pivot_wider(names_from=cn, values_from=input) %>%
+  select(-rn) %>%
+  as.matrix() %>%
+  runfunc(function(m) {
+    rows <- nrow(m)
+    cols <- ncol(m)
+    
+    numbers <- integer()
+    number_coords <- list()
+    star_coords <- integer()
+    digits <- ""
+    coords <- integer()
+    for (r in 1:rows) {
+      for (c in 1:cols) {
+        element <- m[r, c]
+        element_is_digit <- element %in% as.character(0:9)
+        if (element_is_digit) {
+          digits <- str_c(digits, element)
+          coords <- c(coords, c(r, c))
+        }
+        else if (element == "*") {
+          star_coords <- c(star_coords, r, c)
+        }
+        if ((c == cols | !element_is_digit) & digits != "") {
+          numbers <- c(numbers, as.integer(digits))
+          number_coords[[length(numbers)]] <- coords
+          digits <- ""
+          coords <- integer()
+        }
+      }
+    }
+    
+    star_touch_points <- {
+      tibble(star_coords) %>%
+        mutate(
+          star_id=rep(1:(n() / 2), each=2L),
+          dim=rep(c("r", "c"), n() / 2L)
+        ) %>%
+        pivot_wider(names_from=dim, values_from=star_coords) %>%
+        mutate(
+          r=map(r, function(x) {
+            x <- (x - 1L):(x + 1L)
+            x[x >= 1L & x <= rows]
+          }),
+          c=map(c, function(x) {
+            x <- (x - 1L):(x + 1L)
+            x[x >= 1L & x <= cols]
+          })
+        ) %>%
+        unnest(r) %>%
+        unnest(c)
+    }
+    number_coordinates <- {
+      tibble(
+        numbers,
+        number_coords
+      ) %>%
+        mutate(
+          number_id=row_number(),
+          r=map(number_coords, ~ .x[1:length(.x) %% 2 == 1L]),
+          c=map(number_coords, ~ .x[1:length(.x) %% 2 == 0L])
+        ) %>%
+        select(-number_coords) %>%
+        unnest(c(r, c))
+    }
+    
+    number_coordinates %>%
+      inner_join(star_touch_points, join_by(r, c))
+  }) %>%
+  distinct(number_id, numbers, star_id) %>%
+  summarise(
+    n=n(),
+    prod=prod(numbers),
+    .by=star_id
+  ) %>%
+  filter(n == 2L) %>%
+  summarise(sum(prod)) %>%
+  deframe()
+
+```

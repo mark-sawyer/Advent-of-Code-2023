@@ -1,0 +1,174 @@
+---
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r}
+
+setwd("C:/Documents/Misc/Advent of Code/Advent of Code 2023")
+source("Setup.R")
+input <- get_input(5L, practice=FALSE)
+
+```
+
+```{r part 1}
+
+tibble(input=input) %>%
+  runfunc(function(d) {
+    get_location <- function(current_val, map) {
+      map %>%
+        mutate(
+          val=current_val,
+          source_end=source_start + range_length - 1L,
+          steps_ahead=val - source_start,
+          destination=dest_start + steps_ahead
+        ) %>%
+        filter(
+          steps_ahead >= 0L,
+          steps_ahead <= range_length - 1L
+        ) %>%
+        runfunc(function(x) {
+          if (nrow(x) == 0L) return(current_val)
+          else return(x$destination)
+        })
+    }
+    seeds <- {
+      d$input[1] %>%
+        str_remove("seeds: ") %>%
+        str_split(" ") %>%
+        unlist() %>%
+        as.numeric()
+    }
+    maps <- {
+      d %>%
+        filter(row_number() >= 3L) %>%
+        mutate(
+          is_gap=input == "",
+          cumsum=cumsum(is_gap)
+        ) %>%
+        filter(!is_gap) %>%
+        mutate(group=input[1] %>% str_remove(" map:"), .by=cumsum) %>%
+        filter(input != input[1], .by=cumsum) %>%
+        mutate(
+          group=map(group, ~ str_split(.x, "-to-") %>% unlist()),
+          start=map_chr(group, ~ .x[1]),
+          end=map_chr(group, ~ .x[2]),
+          input=map(input, ~ str_split(.x, " ") %>% unlist() %>% as.numeric()),
+          source_start=map_dbl(input, ~ .x[2]),
+          dest_start=map_dbl(input, ~ .x[1]),
+          range_length=map_dbl(input, ~ .x[3])
+        ) %>%
+        select(start, end, source_start, dest_start, range_length) %>%
+        nest_by(start, end) %>%
+        mutate(order=1:n())
+    }
+    
+    maps %>%
+      crossing(seeds) %>%
+      arrange(order) %>%
+      nest_by(seeds) %>%
+      mutate(location=map2_dbl(seeds, data, function(seeds, data) {
+        val <- seeds
+        for (i in 1:nrow(data)) {
+          val <- get_location(val, data$data[[i]])
+        }
+        val
+      }))
+  }) %>%
+  filter(location == min(location)) %>%
+  pull(location)
+
+```
+
+```{r part 2}
+
+tibble(input=input) %>%
+  runfunc(function(d) {
+    map_range_at_level <- function(start, end, level) {
+      current_map <- maps[[level]]
+      
+      found_mapping <- FALSE
+      for (row in 1:nrow(current_map)) {
+        current_range <- current_map[row,]
+        found_mapping <- current_range$source_start <= end & current_range$source_end >= start
+        if (found_mapping) break
+      }
+      if (found_mapping) {
+        temp_mapping_data <- {
+          current_range %>%
+            mutate(
+              start=start,
+              end=end,
+              new_src_start=pmax(source_start, start),
+              new_src_end=pmin(source_end, end),
+              start_offset=new_src_start - source_start,
+              end_offset=source_end - new_src_end,
+              new_dest_start=dest_start + start_offset,
+              new_dest_end=dest_end - end_offset
+            )
+        }
+        if (level < length(maps)) map_range_at_level(temp_mapping_data$new_dest_start, temp_mapping_data$new_dest_end, level + 1L)
+        else end_locations[[length(end_locations) + 1L]] <<- c(temp_mapping_data$new_dest_start, temp_mapping_data$new_dest_end)
+        
+        if (current_range$source_start > start) map_range_at_level(start, current_range$source_start - 1, level)
+        if (current_range$source_end < end) map_range_at_level(current_range$source_end + 1, end, level)   
+      }
+      else {
+        if (level < length(maps)) map_range_at_level(start, end, level + 1L)
+        else end_locations[[length(end_locations) + 1L]] <<- c(start, end)
+      }
+    }
+    seeds <- {
+      d$input[1] %>%
+        str_remove("seeds: ") %>%
+        str_split(" ") %>%
+        unlist() %>%
+        as.numeric() %>%
+        tibble(seed=.) %>%
+        mutate(
+          type=rep(c("start", "range"), n() / 2L),
+          seed_id=rep(1:(n() / 2L), each=2L)
+        ) %>%
+        pivot_wider(names_from=type, values_from=seed) %>%
+        mutate(end=start + range - 1) %>%
+        select(start, end)
+    }
+    maps <- {
+      d %>%
+        filter(row_number() >= 3L) %>%
+        mutate(
+          is_gap=input == "",
+          cumsum=cumsum(is_gap)
+        ) %>%
+        filter(!is_gap) %>%
+        mutate(group=input[1] %>% str_remove(" map:"), .by=cumsum) %>%
+        filter(input != input[1], .by=cumsum) %>%
+        mutate(
+          group=map(group, ~ str_split(.x, "-to-") %>% unlist()),
+          start=map_chr(group, ~ .x[1]),
+          end=map_chr(group, ~ .x[2]),
+          input=map(input, ~ str_split(.x, " ") %>% unlist() %>% as.numeric()),
+          source_start=map_dbl(input, ~ .x[2]),
+          dest_start=map_dbl(input, ~ .x[1]),
+          range=map_dbl(input, ~ .x[3]),
+          source_end=source_start + range - 1L,
+          dest_end=dest_start + range - 1L
+        ) %>%
+        select(start, end, source_start, source_end, dest_start, dest_end, range) %>%
+        nest_by(start, end) %>%
+        pull(data)
+    }
+    
+    levels <- length(maps)
+    end_locations <- list()
+    for (i in 1:nrow(seeds)) {
+      map_range_at_level(seeds[i,]$start, seeds[i,]$end, 1L)
+    }
+    end_locations %>%
+      map(~ .x[1]) %>%
+      unlist() %>%
+      min()
+  })
+
+```

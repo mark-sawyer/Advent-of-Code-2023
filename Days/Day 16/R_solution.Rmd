@@ -1,0 +1,274 @@
+---
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r}
+
+setwd("C:/Documents/Misc/Advent of Code/Advent of Code 2023")
+source("Setup.R")
+input <- get_input(16L, practice=FALSE)
+
+```
+
+```{r part 1}
+
+tibble(input=input) %>%
+  turn_into_matrix() %>%
+  runfunc(function(m) {
+    pos_reflect <- function(dir) {
+      if (dir == "^") ">"
+      else if (dir == ">") "^"
+      else if (dir == "v") "<"
+      else if (dir == "<") "v"
+    }
+    neg_reflect <- function(dir) {
+      if (dir == "^") "<"
+      else if (dir == ">") "v"
+      else if (dir == "v") ">"
+      else if (dir == "<") "^"
+    }
+    energise <- function(energised, beam) {
+      energised[beam$row, beam$col] <- "#"
+      energised
+    }
+    update_beam <- function(beams, i) {
+      beam <- beams[[i]]
+      element <- m[beam$row, beam$col]
+      
+      if (element == "/") beam$dir <- pos_reflect(beam$dir)
+      else if (element == "\\") beam$dir <- neg_reflect(beam$dir)
+      else if (element == "|" && beam$dir %in% c(">", "<")) {
+        if (is_active_splitter[beam$row, beam$col]) {
+          new_beam_1 <- {
+            list(
+              dir="^",
+              row=beam$row - 1L,
+              col=beam$col,
+              active=beam$row - 1L >= 1L
+            )
+          }
+          new_beam_2 <- {
+            list(
+              dir="v",
+              row=beam$row + 1L,
+              col=beam$col,
+              active=beam$row + 1L <= nrow(m)
+            )
+          }
+          beams[[length(beams) + 1L]] <- new_beam_1
+          beams[[length(beams) + 1L]] <- new_beam_2
+        }
+        is_active_splitter[beam$row, beam$col] <<- FALSE
+        beam$active <- FALSE
+      }
+      else if (element == "-" && beam$dir %in% c("^", "v")) {
+        if (is_active_splitter[beam$row, beam$col]) {
+          new_beam_1 <- {
+            list(
+              dir="<",
+              row=beam$row,
+              col=beam$col - 1L,
+              active=beam$col - 1L >= 1L
+            )
+          }
+          new_beam_2 <- {
+            list(
+              dir=">",
+              row=beam$row,
+              col=beam$col + 1L,
+              active=beam$col + 1L <= ncol(m)
+            )
+          }
+          beams[[length(beams) + 1L]] <- new_beam_1
+          beams[[length(beams) + 1L]] <- new_beam_2
+        }
+        is_active_splitter[beam$row, beam$col] <<- FALSE
+        beam$active <- FALSE
+      }
+      
+      beams[[i]] <- beam
+      beams
+    }
+    move_beam <- function(beam) {
+      x <- list(
+        dir=beam$dir,
+        row={
+          if (beam$dir == "^") beam$row - 1L
+          else if (beam$dir == "v") beam$row + 1L
+          else beam$row
+        },
+        col={
+          if (beam$dir == "<") beam$col - 1L
+          else if (beam$dir == ">") beam$col + 1L
+          else beam$col
+        }
+      )
+      x$active <- x$row >= 1L && x$row <= nrow(m) && x$col >= 1L && x$col <= ncol(m)
+      x
+    }
+    
+    is_active_splitter <- matrix(m %in% c("|", "-"), nrow=nrow(m), ncol=ncol(m))
+    energised <- matrix(" ", nrow=nrow(m), ncol=ncol(m))
+    beams <- list({
+      list(
+        dir=">",
+        row=1L,
+        col=1L,
+        active=TRUE
+      )
+    })
+    i <- 1L
+    
+    while (i <= length(beams)) {
+      if (beams[[i]]$active) energised <- energise(energised, beams[[i]])
+      if (beams[[i]]$active) beams <- update_beam(beams, i)
+      if (beams[[i]]$active) beams[[i]] <- move_beam(beams[[i]])
+      if (!beams[[i]]$active) i <- i + 1L
+    }
+    sum(energised == "#")
+  })
+  
+```
+
+```{r part 2}
+
+tibble(input=input) %>%
+  turn_into_matrix() %>%
+  runfunc(function(m) {
+    pos_reflect <- function(dir) {
+      if (dir == "^") ">"
+      else if (dir == ">") "^"
+      else if (dir == "v") "<"
+      else if (dir == "<") "v"
+    }
+    neg_reflect <- function(dir) {
+      if (dir == "^") "<"
+      else if (dir == ">") "v"
+      else if (dir == "v") ">"
+      else if (dir == "<") "^"
+    }
+    energise <- function(energised, beam) {
+      energised[beam$row, beam$col] <- "#"
+      energised
+    }
+    move_beam <- function(beam) {
+      x <- list(
+        dir=beam$dir,
+        row={
+          if (beam$dir == "^") beam$row - 1L
+          else if (beam$dir == "v") beam$row + 1L
+          else beam$row
+        },
+        col={
+          if (beam$dir == "<") beam$col - 1L
+          else if (beam$dir == ">") beam$col + 1L
+          else beam$col
+        }
+      )
+      x$active <- x$row >= 1L && x$row <= nrow(m) && x$col >= 1L && x$col <= ncol(m)
+      x
+    }
+    run_procedure <- function(d, r, c, num) {
+      print(num)
+      update_beam <- function(beams, i) {
+        beam <- beams[[i]]
+        element <- m[beam$row, beam$col]
+        
+        if (element == "/") beam$dir <- pos_reflect(beam$dir)
+        else if (element == "\\") beam$dir <- neg_reflect(beam$dir)
+        else if (element == "|" && beam$dir %in% c(">", "<")) {
+          if (is_active_splitter[beam$row, beam$col]) {
+            new_beam_1 <- {
+              list(
+                dir="^",
+                row=beam$row - 1L,
+                col=beam$col,
+                active=beam$row - 1L >= 1L
+              )
+            }
+            new_beam_2 <- {
+              list(
+                dir="v",
+                row=beam$row + 1L,
+                col=beam$col,
+                active=beam$row + 1L <= nrow(m)
+              )
+            }
+            beams[[length(beams) + 1L]] <- new_beam_1
+            beams[[length(beams) + 1L]] <- new_beam_2
+          }
+          is_active_splitter[beam$row, beam$col] <<- FALSE
+          beam$active <- FALSE
+        }
+        else if (element == "-" && beam$dir %in% c("^", "v")) {
+          if (is_active_splitter[beam$row, beam$col]) {
+            new_beam_1 <- {
+              list(
+                dir="<",
+                row=beam$row,
+                col=beam$col - 1L,
+                active=beam$col - 1L >= 1L
+              )
+            }
+            new_beam_2 <- {
+              list(
+                dir=">",
+                row=beam$row,
+                col=beam$col + 1L,
+                active=beam$col + 1L <= ncol(m)
+              )
+            }
+            beams[[length(beams) + 1L]] <- new_beam_1
+            beams[[length(beams) + 1L]] <- new_beam_2
+          }
+          is_active_splitter[beam$row, beam$col] <<- FALSE
+          beam$active <- FALSE
+        }
+        
+        beams[[i]] <- beam
+        beams
+      }
+      
+      is_active_splitter <- matrix(m %in% c("|", "-"), nrow=nrow(m), ncol=ncol(m))
+      energised <- matrix(" ", nrow=nrow(m), ncol=ncol(m))
+      beams <- list({
+        list(
+          dir=d,
+          row=r,
+          col=c,
+          active=TRUE
+        )
+      })
+      i <- 1L
+      
+      while (i <= length(beams)) {
+        if (beams[[i]]$active) energised <- energise(energised, beams[[i]])
+        if (beams[[i]]$active) beams <- update_beam(beams, i)
+        if (beams[[i]]$active) beams[[i]] <- move_beam(beams[[i]])
+        if (!beams[[i]]$active) i <- i + 1L
+        
+        energised
+      }
+      sum(energised == "#")
+    }
+    
+    tibble(dir=c(">", "v", "<", "^")) %>%
+      crossing(row=1:nrow(m)) %>%
+      crossing(col=1:ncol(m)) %>%
+      filter({
+        (dir == "^" & row == nrow(m)) |
+          (dir == "v" & row == 1L) |
+          (dir == ">" & col == 1L) |
+          (dir == "<" & col == ncol(m))
+      }) %>%
+      mutate(
+        id=1:n(),
+        energised=pmap_int(list(dir, row, col, id), run_procedure)
+      )  
+  }) %>%
+  filter(energised == max(energised)) %>%
+  pull(energised)
+
+```

@@ -1,0 +1,276 @@
+---
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r}
+
+setwd("C:/Documents/Misc/Advent of Code/Advent of Code 2023")
+source("Setup.R")
+input <- get_input(20L, practice=FALSE)
+
+```
+
+```{r part 1}
+
+tibble(input=input) %>%
+  mutate(
+    type={
+      x <- str_sub(input, 1L, 1L)
+      case_when(
+        x == "%" ~ "flipflop",
+        x == "&" ~ "conjunction",
+        TRUE ~ "broadcaster"
+      )
+    },
+    input={
+      if_else(type == "broadcaster", input, str_sub(input, 2L)) %>%
+        str_split(" -> ")
+    },
+    name=map_chr(input, ~ .x[1]),
+    destinations=map_chr(input, ~ .x[2]) %>% str_split(", "),
+    power=if_else(type == "flipflop", "off", NA_character_)
+  ) %>%
+  select(name, destinations, type, power) %>%
+  runfunc(function(d) {
+    d %>%
+      left_join({
+        d %>%
+          select(name, destinations) %>%
+          unnest(destinations) %>%
+          mutate(strength="low") %>%
+          nest_by(destinations, col_name="inputs")
+      }, join_by(name == destinations)) %>%
+      mutate(inputs=map2(inputs, type, function(inputs, type) {
+        if (type != "conjunction") NULL
+        else inputs
+      }))
+  }) %>%
+  runfunc(function(d) {
+    get_row_num <- function(name) {
+      which(d2$name == name)
+    }
+    receive_pulse <- function(name, strength, input) {
+      if (strength == "high") total_highs <<- total_highs + 1L
+      else total_lows <<- total_lows + 1L
+      
+      row_num <- get_row_num(name)
+      if (length(row_num) == 0L) return()
+      type <- d2[row_num,]$type
+      if (type == "broadcaster") {
+        for (destination in d2[row_num,]$destinations[[1]]) {
+          pulses_list[[length(pulses_list) + 1L]] <<- c(destination, strength, name)
+        }
+      }
+      else if (type == "flipflop" & strength == "low") {
+        power <- d2[row_num,]$power
+        d2[row_num,]$power <<- if_else(power == "on", "off", "on")
+        new_strength <- if_else(power == "off", "high", "low")
+        for (destination in d2[row_num,]$destinations[[1]]) {
+          pulses_list[[length(pulses_list) + 1L]] <<- c(destination, new_strength, name)
+        }
+      }
+      else if (type == "conjunction") {
+        rn <- which(d2[row_num,]$inputs[[1]]$name == input)
+        d2[row_num,]$inputs[[1]]$strength[rn] <<- strength
+        all_high <- mean(d2[row_num,]$inputs[[1]]$strength == "high") == 1
+        new_strength <- if_else(all_high, "low", "high")
+        for (destination in d2[row_num,]$destinations[[1]]) {
+          pulses_list[[length(pulses_list) + 1L]] <<- c(destination, new_strength, name)
+        }
+      }
+    }
+    
+    d2 <- d
+    total_highs <- 0L
+    total_lows <- 0L
+    for (i in 1:1000) {
+      pulses_list <- list(c("broadcaster", "low", "button"))
+      i <- 1L
+      while (i <= length(pulses_list)) {
+        receive_pulse(pulses_list[[i]][1], pulses_list[[i]][2], pulses_list[[i]][3])
+        i <- i + 1L
+      }
+    }
+    total_highs * total_lows
+  }) %>%
+  time_code()
+
+```
+
+```{r part 2}
+
+tibble(input=input) %>%
+  mutate(
+    type={
+      x <- str_sub(input, 1L, 1L)
+      case_when(
+        x == "%" ~ "flipflop",
+        x == "&" ~ "conjunction",
+        TRUE ~ "broadcaster"
+      )
+    },
+    input={
+      if_else(type == "broadcaster", input, str_sub(input, 2L)) %>%
+        str_split(" -> ")
+    },
+    name=map_chr(input, ~ .x[1]),
+    destinations=map_chr(input, ~ .x[2]) %>% str_split(", ")
+  ) %>%
+  select(name, type, destinations) %>%
+  runfunc(function(d) {
+    conjunction_extra <- d %>%
+      filter(type == "conjunction") %>%
+      select(name) %>%
+      inner_join({
+        d %>%
+          select(name, destinations) %>%
+          unnest(destinations) %>%
+          mutate(strength="low") %>%
+          nest_by(destinations, col_name="inputs")
+      }, join_by(name == destinations))
+    
+    flip_flop_extra <- d %>%
+      filter(type == "flipflop") %>%
+      transmute(name, power=FALSE)
+    
+    d %>%
+      left_join(conjunction_extra, join_by(name)) %>%
+      left_join(flip_flop_extra, join_by(name))
+  }) %>%
+  runfunc(function(d) {
+    # Functions ----
+    manage_pulse <- function(pulse_info) {
+      module <- modules[[pulse_info$to]]
+      if (module$type == "flipflop") {
+        if (pulse_info$strength == "high") return()
+        module$power <- !module$power
+        new_strength <- if_else(module$power, "high", "low")
+      }
+      else if (module$type == "conjunction") {
+        module$inputs[[1]] <- {
+          module$inputs[[1]] %>%
+            mutate(strength=if_else(
+              name == pulse_info$from,
+              pulse_info$strength,
+              strength
+            ))
+        }
+        new_strength <- if_else(mean(module$inputs[[1]]$strength == "high") == 1, "low", "high")
+      }
+      
+      modules[[pulse_info$to]] <<- module
+      for (name in module$destinations[[1]]) {
+        pulses_list[[length(pulses_list) + 1L]] <<- {
+          list(
+            from=pulse_info$to,
+            to=name,
+            strength=new_strength
+          )
+        }
+      }
+    }
+    reset_modules <- function() {
+      sans_broadcaster <- d %>% filter(type != "broadcaster")
+      hash <- hash::hash()
+      for (i in 1:nrow(sans_broadcaster)) {
+        hash[[sans_broadcaster$name[i]]] <- sans_broadcaster[i,] %>%
+          runfunc(function(x) {
+            if (x$type == "flipflop") x %>% select(type, destinations, power)
+            else x %>% select(type, destinations, inputs)
+          })
+      }
+      
+      # Add destinations not in name column
+      d %>%
+        unnest(destinations) %>%
+        anti_join(d, join_by(destinations == name)) %>%
+        pull(destinations) %>%
+        runfunc(function(x) {
+          for (name in x) {
+            hash[[name]] <- tibble(type="na", destinations=list(character(0)))
+          }
+        })
+      
+      hash
+    }
+    low_charge_sent <- function(third_last, second_last) {
+      pulses_list %>%
+        keep(function(x) {
+          x$from == third_last &&
+            x$to == second_last &&
+            x$strength == "low"
+        }) %>%
+        length() %>%
+        { . > 0L }
+    }
+    
+    # Objects ----
+    start_pulses <- {
+      d %>%
+        filter(type == "broadcaster") %>%
+        unnest(destinations) %>%
+        mutate(list=map2(name, destinations, function(name, destination) {
+          list(
+            from=name,
+            to=destination,
+            strength="low"
+          )
+        })) %>%
+        pull(list)
+    }
+    modules <- reset_modules()
+    
+    # Algorithm ----
+    input_to_rx <- {
+      d %>%
+        select(name, destinations) %>%
+        unnest(destinations) %>%
+        filter(destinations == "rx") %>%
+        pull(name)
+    }
+    second_last_layer <- {
+      d %>%
+        select(name, destinations) %>%
+        unnest(destinations) %>%
+        filter(destinations == input_to_rx) %>%
+        pull(name)
+    }
+    third_last_layer <- {
+      d %>%
+        select(name, destinations) %>%
+        unnest(destinations) %>%
+        filter(destinations %in% second_last_layer)
+    }
+    
+    # When the modules in the third last layer all send low charges
+    # then the modules in the second last layer will all send high charges
+    # and the input to rx will send a low charge.
+    
+    pushes <- numeric(nrow(third_last_layer))
+    for (third_last_index in 1:nrow(third_last_layer)) {
+      current_3rd_last <- third_last_layer$name[third_last_index]
+      current_2nd_last <- third_last_layer$destinations[third_last_index]
+      modules <- reset_modules()
+      button_pushes <- 0L
+      was_low <- FALSE
+      
+      while (!was_low) {
+        button_pushes <- button_pushes + 1L
+        print(button_pushes)
+      
+        pulses_list <- start_pulses
+        i <- 1L
+        while (i <= length(pulses_list)) {
+          manage_pulse(pulses_list[[i]])
+          i <- i + 1L
+        }
+        was_low <- low_charge_sent(current_3rd_last, current_2nd_last)
+      }
+      pushes[third_last_index] <- button_pushes
+    }
+    prod(pushes) %>% as.character()
+  })
+
+```
